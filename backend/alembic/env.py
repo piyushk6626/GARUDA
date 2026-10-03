@@ -13,7 +13,7 @@ if config.config_file_name is not None:
 def database_url() -> str:
     url = os.environ.get(
         "DATABASE_URL",
-        "postgresql://garuda:garuda@localhost:5432/garuda",
+        "postgresql://garuda:garuda@localhost:5433/garuda",
     )
     if url.startswith("postgresql://"):
         return "postgresql+psycopg://" + url.removeprefix("postgresql://")
