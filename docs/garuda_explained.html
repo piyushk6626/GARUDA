@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GARUDA — explained simply</title>
+<style>
+  :root {
+    --ink: #1a2332;
+    --muted: #5c6778;
+    --paper: #f3efe6;
+    --card: #fffcf7;
+    --line: #e2d9cc;
+    --navy: #142033;
+    --saffron: #d46a2e;
+    --saffron-soft: #f8e6d8;
+    --data: #0f6e6a;
+    --data-soft: #e5f4f3;
+    --agent: #2a4d8f;
+    --agent-soft: #e7eef8;
+    --opt: #8a4b12;
+    --opt-soft: #f8efe4;
+    --good: #1f7a4d;
+    --warn: #a15c00;
+    --bad: #a33b32;
+    --shadow: 0 10px 30px rgba(20, 32, 51, 0.06);
+    --nav: 248px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 500px at 100% -10%, #efe4d4 0%, transparent 55%),
+      var(--paper);
+    font: 17px/1.55 "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  }
+  a { color: var(--agent); }
+  code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: #efe8dc;
+    padding: 0.08em 0.35em;
+    border-radius: 4px;
+  }
+
+  .nav {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--nav);
+    background: var(--navy);
+    color: #e8e4dc;
+    padding: 22px 16px 28px;
+    overflow: auto;
+    z-index: 20;
+  }
+  .nav .mark {
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    font-size: 13px;
+    color: #f0c9a8;
+  }
+  .nav h1 {
+    margin: 6px 0 4px;
+    font-size: 22px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    color: white;
+  }
+  .nav p { margin: 0 0 16px; color: #b7c0cc; font-size: 13px; line-height: 1.4; }
+  .nav a {
+    display: block;
+    color: #d5dbe4;
+    text-decoration: none;
+    font-size: 13.5px;
+    padding: 6px 8px;
+    border-radius: 6px;
+  }
+  .nav a:hover, .nav a:focus { background: rgba(255,255,255,0.08); color: white; }
+  .nav .group { margin: 14px 8px 4px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8d98a8; }
+
+  main { margin-left: var(--nav); padding: 36px 40px 80px; max-width: 1180px; }
+  section { margin: 0 0 56px; scroll-margin-top: 20px; }
+  h2 {
+    font-size: 30px;
+    letter-spacing: -0.03em;
+    margin: 0 0 8px;
+    line-height: 1.15;
+  }
+  h3 { font-size: 20px; margin: 22px 0 8px; letter-spacing: -0.02em; }
+  .lede { font-size: 19px; color: #2c3848; max-width: 72ch; margin: 0 0 18px; }
+  .note { color: var(--muted); font-size: 15px; max-width: 75ch; }
+
+  .hero {
+    background: var(--navy);
+    color: white;
+    border-radius: 18px;
+    padding: 32px 34px 28px;
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: "";
+    position: absolute;
+    right: -40px; top: -40px;
+    width: 220px; height: 220px;
+    border: 28px solid rgba(212, 106, 46, 0.35);
+    border-radius: 50%;
+  }
+  .kicker { letter-spacing: 0.16em; text-transform: uppercase; font-size: 12px; color: #f0c9a8; margin: 0 0 8px; }
+  .hero h2 { font-size: 40px; margin: 0 0 10px; max-width: 16ch; }
+  .hero p { max-width: 62ch; color: #d7dee8; margin: 0; font-size: 18px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .pill {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+
+  .rule {
+    display: grid;
+    grid-template-columns: 88px 1fr;
+    gap: 16px;
+    align-items: center;
+    background: var(--saffron-soft);
+    border-left: 6px solid var(--saffron);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin: 18px 0 8px;
+  }
+  .rule strong { display: block; font-size: 18px; }
+  .badge {
+    width: 88px; height: 88px;
+    border-radius: 50%;
+    background: var(--saffron);
+    color: white;
+    display: grid; place-items: center;
+    text-align: center;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1.15;
+    letter-spacing: 0.02em;
+  }
+
+  .layers { display: grid; gap: 12px; margin-top: 16px; }
+  .layer {
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 12px;
+    align-items: start;
+    box-shadow: var(--shadow);
+  }
+  .layer .tag { font-weight: 700; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .layer h3 { margin: 0 0 4px; }
+  .layer p { margin: 0; }
+  .layer.data { background: var(--data-soft); }
+  .layer.data .tag { color: var(--data); }
+  .layer.agent { background: var(--agent-soft); }
+  .layer.agent .tag { color: var(--agent); }
+  .layer.opt { background: var(--opt-soft); }
+  .layer.opt .tag { color: var(--opt); }
+  .arrow-down {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+  }
+
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin: 16px 0;
+  }
+  .step {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 12px 14px;
+    position: relative;
+    min-height: 132px;
+    box-shadow: var(--shadow);
+  }
+  .step .n {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--navy); color: white;
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .step strong { display: block; margin-bottom: 4px; }
+  .step span { color: var(--muted); font-size: 14px; }
+
+  .story { display: grid; gap: 0; }
+  .beat {
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 12px;
+  }
+  .beat .rail { display: flex; flex-direction: column; align-items: center; }
+  .dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--saffron);
+    border: 3px solid #f6d3bf;
+    margin-top: 4px;
+    flex: none;
+  }
+  .stem { width: 2px; flex: 1; background: #e4cbb8; min-height: 18px; }
+  .beat .body {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .beat .who { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
+  .who.data { color: var(--data); }
+  .who.agent { color: var(--agent); }
+  .who.opt { color: var(--opt); }
+  .who.human { color: var(--saffron); }
+  .beat p { margin: 4px 0 0; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+  }
+  .card h3 { margin-top: 0; }
+  .card p:last-child { margin-bottom: 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    font-size: 15px;
+  }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #efe8dc; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: #3d4a5c; }
+  tr:last-child td { border-bottom: 0; }
+
+  .bases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .base {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+  }
+  .base b { display: block; }
+  .base span { color: var(--muted); font-size: 13px; }
+
+  .timeline { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 10px; }
+  .tl {
+    background: var(--card);
+    border-top: 4px solid var(--saffron);
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+  }
+  .tl b { display: block; font-size: 13px; color: var(--saffron); }
+
+  .onto {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .obj {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  .obj b { display: block; }
+  .rels {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .rel {
+    background: var(--navy);
+    color: #f4efe6;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 13px;
+  }
+
+  .search {
+    width: 100%;
+    max-width: 420px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: white;
+    font: inherit;
+    margin: 8px 0 14px;
+  }
+  .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tool { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .tool .name { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: var(--opt); }
+  .tool h3 { margin: 2px 0 6px; font-size: 17px; }
+  .tool p { margin: 0; font-size: 15px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    font-size: 12px;
+    background: var(--opt-soft);
+    color: var(--opt);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+  .chip.teal { background: var(--data-soft); color: var(--data); }
+  .chip.blue { background: var(--agent-soft); color: var(--agent); }
+  .hidden { display: none !important; }
+
+  .dep {
+    display: grid;
+    grid-template-columns: 1fr auto 1.2fr auto 1fr;
+    gap: 8px;
+    align-items: center;
+  }
+  .dep .col { display: grid; gap: 6px; }
+  .dep .box {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-size: 13px;
+  }
+  .dep .mid {
+    background: var(--navy);
+    color: white;
+    border-radius: 12px;
+    padding: 16px 12px;
+    text-align: center;
+    font-weight: 700;
+  }
+  .dep .arr { color: var(--muted); font-size: 22px; text-align: center; }
+
+  .graph {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .node {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+  }
+  .node b { display: block; }
+  .node span { color: var(--muted); font-size: 14px; }
+
+  .store { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .store .card b { color: var(--data); }
+
+  .build { counter-reset: b; display: grid; gap: 8px; }
+  .build li {
+    list-style: none;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px 12px 52px;
+    position: relative;
+  }
+  .build { padding: 0; margin: 10px 0 0; }
+  .build li::before {
+    counter-increment: b;
+    content: counter(b);
+    position: absolute;
+    left: 12px; top: 12px;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--navy);
+    color: white;
+    display: grid; place-items: center;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .glossary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
+  .glossary dt { font-weight: 700; }
+  .glossary dd { margin: 0 0 8px; color: #334155; }
+
+  footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 16px; }
+
+  @media (max-width: 980px) {
+    .nav {
+      position: sticky;
+      top: 0;
+      width: auto;
+      max-height: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      padding: 10px 12px;
+      z-index: 30;
+    }
+    .nav .mark, .nav h1, .nav p, .nav .group { display: none; }
+    .nav a { display: inline-block; padding: 4px 8px; font-size: 12.5px; }
+    main { margin-left: 0; padding: 20px 16px 48px; }
+    .flow, .bases, .timeline, .onto, .grid-2, .grid-3, .tools, .store, .graph, .glossary, .dep, .layer {
+      grid-template-columns: 1fr;
+    }
+    .bases, .timeline, .onto, .store, .graph { grid-template-columns: 1fr 1fr; }
+    .dep .arr { transform: rotate(90deg); }
+    .hero h2 { font-size: 32px; }
+    .rule { grid-template-columns: 64px 1fr; }
+    .badge { width: 64px; height: 64px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="mark">GARUDA</div>
+  <h1>Explained simply</h1>
+  <p>One page for the whole design. All military numbers are fictional.</p>
+  <a href="#problem">The problem</a>
+  <a href="#picture">The big picture</a>
+  <a href="#story">One story, end to end</a>
+  <a href="#theatre">The theatre</a>
+  <a href="#objects">The objects</a>
+  <div class="group">Layer 1 · Data</div>
+  <a href="#data">What we store</a>
+  <a href="#synthetic">How fake data is made</a>
+  <a href="#stores">Where it lives</a>
+  <div class="group">Layer 2 · Language agent</div>
+  <a href="#harness">How the agent thinks</a>
+  <a href="#tools-data">Questions it can ask</a>
+  <a href="#safety">Human approval</a>
+  <a href="#api">The API</a>
+  <div class="group">Layer 3 · Math &amp; models</div>
+  <a href="#solvers">The toolbox</a>
+  <a href="#depends">How tools connect</a>
+  <a href="#build">What to build first</a>
+  <a href="#glossary">Glossary</a>
+</nav>
+
+<main>
+  <header class="hero">
+    <p class="kicker">Global Air Resource &amp; Unified Decision Architecture</p>
+    <h2>A planner you can talk to. Math that does the planning.</h2>
+    <p>GARUDA helps plan and re-plan air operations when the situation changes fast. You ask in plain language. A language model looks up the facts and calls solvers. A person still approves every change to who flies what.</p>
+    <div class="pills">
+      <span class="pill">Hackathon prototype</span>
+      <span class="pill">One fictional theatre</span>
+      <span class="pill">Unclassified synthetic military data</span>
+      <span class="pill">Real weather, maps, and civil traffic</span>
+    </div>
+  </header>
+
+  <section id="problem">
+    <h2>The problem</h2>
+    <p class="lede">Planning air operations means juggling aircraft, crews, weapons, airspace, weather, threats, and mission priorities. Those facts usually live in different systems, so plans take too long and scarce aircraft get used poorly.</p>
+    <div class="grid-3">
+      <div class="card">
+        <h3>Too many sources</h3>
+        <p>Readiness, weather, threats, and tasking are not in one live picture.</p>
+      </div>
+      <div class="card">
+        <h3>The picture moves</h3>
+        <p>A jet breaks, fog closes a base, a new threat appears, an urgent request arrives. The old plan is stale in minutes.</p>
+      </div>
+      <div class="card">
+        <h3>Scarce airpower</h3>
+        <p>There are never enough flyable jets, rested crews, weapons, or tankers. A good plan is an allocation problem, not a guess.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="picture">
+    <h2>The big picture</h2>
+    <p class="lede">Three layers. Data holds the facts. The language agent is the interface. Solvers and models do the actual numbers.</p>
+
+    <div class="rule">
+      <div class="badge">ONE<br>RULE</div>
+      <div>
+        <strong>The language model never invents a plan or a number.</strong>
+        It retrieves data, calls a tool, and explains what the tool returned. If it does not have the data, it says so.
+      </div>
+    </div>
+
+    <div class="layers">
+      <div class="layer opt">
+        <div class="tag">Layer 3</div>
+        <div>
+          <h3>Optimization and prediction</h3>
+          <p>Math solvers assign missions, crews, weapons, tankers, and routes. Machine-learning models forecast breakdowns, weather, fatigue, and success. Monte Carlo stress-tests the plan.</p>
+        </div>
+      </div>
+      <div class="arrow-down">▲ called as typed tools &nbsp;&nbsp; ▼ results, KPIs, explanations</div>
+      <div class="layer agent">
+        <div class="tag">Layer 2</div>
+        <div>
+          <h3>LLM harness</h3>
+          <p>A LangGraph agent inside FastAPI. You talk to it. It chooses tools, checks its own draft, and stops for a human before anything is committed.</p>
+        </div>
+      </div>
+      <div class="arrow-down">▲ reads repositories only &nbsp;&nbsp; ▼ live events</div>
+      <div class="layer data">
+        <div class="tag">Layer 1</div>
+        <div>
+          <h3>Data</h3>
+          <p>Real open feeds (weather, civil aircraft, maps, terrain) plus synthetic generators for the fictional force. Stored in the engine that fits the question.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>What happens when you ask for a plan</h3>
+    <div class="flow">
+      <div class="step"><div class="n">1</div><strong>You ask</strong><span>“Retask after this jet went down.”</span></div>
+      <div class="step"><div class="n">2</div><strong>Agent looks up</strong><span>Affected missions, aircraft, crews, threats, weather.</span></div>
+      <div class="step"><div class="n">3</div><strong>Solvers compute</strong><span>A new assignment, routes, crew, and a risk check.</span></div>
+      <div class="step"><div class="n">4</div><strong>You decide</strong><span>Approve, or reject with a comment.</span></div>
+      <div class="step"><div class="n">5</div><strong>Plan is saved</strong><span>Only after approval. Every step is logged.</span></div>
+    </div>
+  </section>
+
+  <section id="story">
+    <h2>One story, end to end</h2>
+    <p class="lede">This is the whole system in one event. At six hours into the exercise, three aircraft become not mission capable (NMC).</p>
+    <div class="story">
+      <div class="beat">
+        <div class="rail"><div class="dot"></div><div class="stem"></div></div>
+        <div class="body">
+          <div class="who data">Data layer</div>
+          <p>The simulator publishes <code>aircraft.status</code> on Redpanda. Consumers update Postgres (the record), Timescale (the history), Neo4j (the links), and Redis (the live snapshot).</p>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="rail"><div class="dot"></div><div class="stem"></div></div>
+        <div class="body">
+          <div class="who agent">Harness</div>
+          <p>The UI hears the event over a live stream. Someone says “retask.” The router labels this <em>RETASK</em>, not a simple question.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="rail"><div class="dot"></div><div class="stem"></div></div>
+        <div class="body">
+          <div class="who agent">Harness</div>
+          <p>The planner calls <code>get_mission_requests</code> for the broken tails, then <code>retask_rolling_horizon</code>. Flights already airborne, or launching inside two hours, stay locked.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="rail"><div class="dot"></div><div class="stem"></div></div>
+        <div class="body">
+          <div class="who opt">Optimization</div>
+          <p>A smaller copy of the assignment problem is solved in seconds. It prefers keeping the old plan, and only moves what the breakdown forces. It returns a diff: who replaced whom, what was dropped, and why.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="rail"><div class="dot"></div><div class="stem"></div></div>
+        <div class="body">
+          <div class="who agent">Critic</div>
+          <p>A non-LLM checker confirms the solver status, that constraints still hold, that KPIs exist, and that the data is fresh. Then Monte Carlo runs the new plan many times under random failures and weather.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="rail"><div class="dot"></div><div class="stem"></div></div>
+        <div class="body">
+          <div class="who human">Human</div>
+          <p>The screen shows the draft, the change from the old plan, the risks, and a few alternative trade-offs. The commander approves or rejects with a comment. Rejection sends the comment back to the planner.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="rail"><div class="dot"></div></div>
+        <div class="body">
+          <div class="who data">Commit</div>
+          <p>Approval writes a new plan version, updates the graph, and publishes <code>garuda.plan.event</code>. The language model then explains the result in sentences, citing the tool outputs.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="theatre">
+    <h2>The theatre</h2>
+    <p class="lede">A fictional western air front over Rajasthan, Gujarat, and Punjab. Only the geography and public airfield locations are real. Units, strengths, weapons, and threats are invented.</p>
+    <div class="bases">
+      <div class="base"><b>B1 Jodhpur</b><span>VIJO · fighter / strike</span></div>
+      <div class="base"><b>B2 Jaisalmer</b><span>VIJR · forward fighter</span></div>
+      <div class="base"><b>B3 Nal (Bikaner)</b><span>VIBK · forward fighter</span></div>
+      <div class="base"><b>B4 Ambala</b><span>VIAM · fighter / strike</span></div>
+      <div class="base"><b>B5 Adampur</b><span>VIAX · fighter</span></div>
+      <div class="base"><b>B6 Bhuj</b><span>VABJ · transport / close support</span></div>
+      <div class="base"><b>B7 Agra</b><span>VIAG · tanker / transport / AWACS</span></div>
+      <div class="base"><b>~150 aircraft</b><span>~300 crew · fixed random seed</span></div>
+    </div>
+    <p class="note">Fleet mix, all fictional counts: Su-30MKI 40, Rafale 24, Tejas 24, Mirage-2000 18, Jaguar 12, C-130J 8, IL-78 tankers 6, AWACS 4, helicopters 14. Weapons are generic classes such as a beyond-visual-range missile or a 500 lb guided bomb, with made-up performance.</p>
+    <h3>72-hour clock</h3>
+    <p class="note">Planning buckets are 6 hours. Re-plans can be as fine as 1 hour. These scripted surprises exercise retasking:</p>
+    <div class="timeline">
+      <div class="tl"><b>T0</b>Plan the next 72 hours.</div>
+      <div class="tl"><b>T+6h</b>Aircraft go NMC.</div>
+      <div class="tl"><b>T+14h</b>A new SAM appears near Jaisalmer.</div>
+      <div class="tl"><b>T+20h</b>Fog closes Adampur.</div>
+      <div class="tl"><b>T+30h</b>Priority-1 close-support request.</div>
+      <div class="tl"><b>T+40h</b>A tanker is lost.</div>
+    </div>
+  </section>
+
+  <section id="objects">
+    <h2>The objects</h2>
+    <p class="lede">Everything is an object with a shared id. Relationships live in Neo4j, like a Palantir-style graph. Attributes are mirrored in Postgres and Redis.</p>
+    <div class="onto">
+      <div class="obj"><b>Base</b>Airfield, fuel, shelters, runways</div>
+      <div class="obj"><b>Squadron</b>Role, aircraft type, home base</div>
+      <div class="obj"><b>Aircraft</b>Tail, status, fuel, hours, next maintenance</div>
+      <div class="obj"><b>Crew</b>Role, qualifications, fatigue, duty hours</div>
+      <div class="obj"><b>Weapon</b>Type, range, stock at a base, load config</div>
+      <div class="obj"><b>Mission</b>Type, priority, time window, status</div>
+      <div class="obj"><b>Target</b>Class, place, value, hardness</div>
+      <div class="obj"><b>Threat</b>Type, place, range, confidence</div>
+      <div class="obj"><b>Airspace</b>Zone shape, floor, ceiling, active times</div>
+      <div class="obj"><b>Weather cell</b>Ceiling, visibility, wind, storms</div>
+      <div class="obj"><b>Tanker</b>An aircraft that can offload fuel</div>
+      <div class="obj"><b>Plan</b>Assignments, objective, KPIs, status</div>
+    </div>
+    <div class="rels">
+      <span class="rel">Squadron based at Base</span>
+      <span class="rel">Aircraft assigned to Squadron</span>
+      <span class="rel">Crew qualified on Aircraft</span>
+      <span class="rel">Mission targets Target</span>
+      <span class="rel">Mission launches from Base</span>
+      <span class="rel">Plan assigns Aircraft and Crew</span>
+      <span class="rel">Threat covers Target</span>
+      <span class="rel">Weather affects Base</span>
+    </div>
+    <p class="note">The agent does not write free database queries. It picks a named template such as “aircraft with qualified crew” and fills in parameters. Example question the graph can answer: which rested crews at Jodhpur can fly a fully mission capable jet?</p>
+  </section>
+
+  <section id="data">
+    <h2>Layer 1 — what we store</h2>
+    <p class="lede">Each domain has one owner. Other databases are copies, fed by the message bus, so they can drift and be rebuilt.</p>
+    <table>
+      <thead>
+        <tr><th>Domain</th><th>What it answers</th><th>Where it comes from</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Aircraft</td><td>Can this tail fly, from where, with what fuel, until when?</td><td>Synthetic fleet. Statuses: FMC, PMC, NMC, AOG, in mission.</td></tr>
+        <tr><td>Crew</td><td>Who is qualified, rested, and legal to fly?</td><td>Synthetic. Names are fake.</td></tr>
+        <tr><td>Weapons</td><td>What is in the bunker, and which load fits which jet?</td><td>Synthetic generic classes. Stocks fall when used and resupply every 24 h.</td></tr>
+        <tr><td>Missions</td><td>What was asked for, how urgent, and by when?</td><td>Synthetic. Types include air defence, strike, SEAD, close support, ISR, tanking, airlift, rescue. Priority 1 is highest, 5 is lowest.</td></tr>
+        <tr><td>Threats</td><td>What hostile systems block a route?</td><td>Fully fictional “Red” SAMs, radars, guns, fighters. No real order of battle.</td></tr>
+        <tr><td>Airspace</td><td>Which boxes are closed, and between which heights and times?</td><td>Public OpenAIP where possible, plus synthetic exercise zones.</td></tr>
+        <tr><td>Weather</td><td>Can we launch, transit, attack, and recover?</td><td><b>Real.</b> Open-Meteo forecasts and METAR/TAF for the seven airfields.</td></tr>
+        <tr><td>Civil traffic</td><td>Are airliners in the way?</td><td><b>Real</b> ADS-B from OpenSky, kept briefly.</td></tr>
+        <tr><td>Maps and terrain</td><td>Where are bases, and does terrain mask a route?</td><td><b>Real</b> OpenStreetMap and SRTM elevation. Bases are public airfields.</td></tr>
+        <tr><td>Doctrine</td><td>What do the standing procedures say?</td><td>Synthetic or public documents, searched by meaning.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="synthetic">
+    <h2>How the fake data is made</h2>
+    <p class="lede">A fixed seed (<code>GARUDA_SEED</code>) makes the same world every time. Two stages: a static world, then a clock that keeps moving.</p>
+    <div class="flow">
+      <div class="step"><div class="n">1</div><strong>Scenario file</strong><span>Bases, fleet mix, horizon, scripted events.</span></div>
+      <div class="step"><div class="n">2</div><strong>Static world</strong><span>Aircraft, crews, weapons, threats, missions, zones. Checked, then loaded.</span></div>
+      <div class="step"><div class="n">3</div><strong>Live simulator</strong><span>SimPy advances a fake clock, often at 60× speed.</span></div>
+      <div class="step"><div class="n">4</div><strong>Message bus</strong><span>Each change is an event on Redpanda.</span></div>
+      <div class="step"><div class="n">5</div><strong>Stores update</strong><span>Consumers write Postgres, the graph, history, and Redis.</span></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>What the clock simulates</h3>
+        <p>Breakdowns (older jets fail more), maintenance finishing, fuel burn and refuel, sortie turnarounds, crew duty and rest, threats that pop up or move, new missions arriving at random, cancellations, and weather overrides. Surge flying raises the failure rate by about 1.3×.</p>
+      </div>
+      <div class="card">
+        <h3>Scripted injections</h3>
+        <p>A button or <code>POST /v1/scenario/inject-event</code> can force a known surprise: aircraft NMC, new SAM, base closed, priority-1 request, tanker lost, or a weather override. Useful for demos, because the outcome is predictable.</p>
+      </div>
+    </div>
+    <p class="note">Checks before the data is trusted: every aircraft has a base and squadron, weapon loads respect weight limits, and a snapshot with the same seed always matches. Commands: <code>python -m garuda.generate</code> and <code>python -m garuda.simulate --speed 60</code>.</p>
+  </section>
+
+  <section id="stores">
+    <h2>Where each fact lives</h2>
+    <p class="lede">Postgres is the authority. If the graph drifts, it is rebuilt from Postgres. The agent never opens a database itself. It calls repositories.</p>
+    <div class="store">
+      <div class="card"><b>Postgres + PostGIS</b><p>The official record: aircraft, crews, weapons, missions, plans, and map shapes.</p></div>
+      <div class="card"><b>TimescaleDB</b><p>History: status over time, weather grids, tracks. Same Postgres engine, built for time.</p></div>
+      <div class="card"><b>Neo4j</b><p>“Who is connected to whom.” Qualified crews, mission packages, threat coverage.</p></div>
+      <div class="card"><b>Redis</b><p>The live board: current status, weapon counters, active threats, pending missions. Rebuilt from Postgres if wiped.</p></div>
+      <div class="card"><b>Redpanda</b><p>Kafka-compatible bus. Topics like <code>garuda.aircraft.status</code>. Kept 7 days. Latest-state topics are compacted.</p></div>
+      <div class="card"><b>MinIO + pgvector</b><p>Files (terrain, raw weather) and document chunks for doctrine search.</p></div>
+    </div>
+    <p class="note">An event looks like: id, type, entity, time, version, payload. Consumers are safe to replay. Plans and the audit log are kept. Aircraft history is about 90 days. Live civil tracks expire within a day.</p>
+  </section>
+
+  <section id="harness">
+    <h2>Layer 2 — how the agent thinks</h2>
+    <p class="lede">LangGraph is a flowchart with memory. FastAPI is the front door. A checkpoint in Postgres lets an approval wait survive a restart.</p>
+    <div class="graph">
+      <div class="node"><b>Router</b><span>Is this a question, a new plan, a retask, a what-if, or “explain that”?</span></div>
+      <div class="node"><b>Retriever</b><span>For questions: call read-only data tools until it can answer.</span></div>
+      <div class="node"><b>Planner</b><span>Decides the next tool, or that it is ready to answer. Keeps a scratchpad.</span></div>
+      <div class="node"><b>Tool executor</b><span>Runs the call only if the arguments match the schema. Times out if it runs too long.</span></div>
+      <div class="node"><b>Critic</b><span>Not a language model. Checks constraints, KPIs, freshness, and solver status. Sends it back if something is wrong.</span></div>
+      <div class="node"><b>Approval</b><span>Pauses. The API says “awaiting approval.” Nothing is tasking until a person continues the graph.</span></div>
+      <div class="node"><b>Commit</b><span>Writes the plan version and publishes the event. Only with a signed approval token.</span></div>
+      <div class="node"><b>Respond</b><span>Plain-language summary. Numbers cite a tool call, like [T3].</span></div>
+      <div class="node"><b>Memory</b><span>Messages, intent, scenario clock, cached tool results, the draft plan, and a tool-call budget.</span></div>
+    </div>
+    <div class="grid-2" style="margin-top:14px">
+      <div class="card">
+        <h3>Three ways it finds facts</h3>
+        <p><b>Structured tools</b> are the default (filter aircraft, weather along a route). <b>The graph</b> answers relationship questions. <b>Document search</b> is for procedures: chunks of about 500 words, matched by meaning and by keywords.</p>
+      </div>
+      <div class="card">
+        <h3>It does not drown in data</h3>
+        <p>Tools return totals plus the top rows, not the whole table. Big results get a handle; the model can ask for the next slice. A short cache (30–60 seconds) avoids repeat lookups. The scenario clock and data age are injected every turn.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="tools-data">
+    <h2>Questions it can ask</h2>
+    <p class="lede">These tools only read. They cannot change tasking. Each one takes one validated object in and returns one object out.</p>
+    <div class="tools">
+      <div class="tool"><div class="name">get_aircraft_availability</div><h3>Which jets can fly?</h3><p>Filter by base, type, status, or a future time (then it uses the forecast).</p></div>
+      <div class="tool"><div class="name">get_crew_status</div><h3>Who is legal to fly?</h3><p>Qualification, fatigue, and a time window.</p></div>
+      <div class="tool"><div class="name">get_weapon_stock</div><h3>What munitions are left?</h3><p>Stock and legal loadouts per base.</p></div>
+      <div class="tool"><div class="name">get_airspace</div><h3>What airspace is hot?</h3><p>Zones along a route, height, and time.</p></div>
+      <div class="tool"><div class="name">get_weather_along_route</div><h3>Can we fly this path?</h3><p>Ceiling, visibility, wind, storms, and a flyability score.</p></div>
+      <div class="tool"><div class="name">get_threats_in_area</div><h3>What is defending this area?</h3><p>Threats inside a radius or a polygon, above a confidence level.</p></div>
+      <div class="tool"><div class="name">get_mission_requests</div><h3>What still needs doing?</h3><p>Pending and planned missions by priority and window.</p></div>
+      <div class="tool"><div class="name">get_civil_traffic</div><h3>Are airliners nearby?</h3><p>Recent ADS-B tracks in an area.</p></div>
+      <div class="tool"><div class="name">query_ontology</div><h3>How are things linked?</h3><p>A fixed Cypher template plus parameters. No free-form graph queries.</p></div>
+      <div class="tool"><div class="name">spatial_query</div><h3>How far, and does it overlap?</h3><p>Distance, radius, nearest, intersection, buffer. PostGIS does the geometry.</p></div>
+      <div class="tool"><div class="name">search_doctrine</div><h3>What do the procedures say?</h3><p>Top passages from standing documents, with a score.</p></div>
+    </div>
+  </section>
+
+  <section id="safety">
+    <h2>Human approval and guardrails</h2>
+    <p class="lede">GARUDA supports a decision. It does not make one. No tasking change takes effect without an explicit approval, and every step can be audited.</p>
+    <table>
+      <thead><tr><th>Risk</th><th>What stops it</th></tr></thead>
+      <tbody>
+        <tr><td>The model changes the plan by itself</td><td>Draft tools write only a draft. <code>commit_plan</code> needs an approval token. The model cannot call commit.</td></tr>
+        <tr><td>Invented numbers</td><td>The critic rejects figures that are not in a tool result. “I don’t have that data” is an allowed answer.</td></tr>
+        <tr><td>Stale facts</td><td>Every result has <code>data_as_of</code>. Warn after 15 minutes for status, 3 hours for weather.</td></tr>
+        <tr><td>A solver that cheats its own constraints</td><td>A separate checker re-validates the plan before anyone sees it.</td></tr>
+        <tr><td>Prompt injection in a document or a remark</td><td>Retrieved text is treated as data. Tool arguments are still checked against the schema.</td></tr>
+        <tr><td>Too many tool calls</td><td>A budget per turn, a timeout per tool, and an allow-list by role: Planner, Commander, Observer.</td></tr>
+        <tr><td>Classified data leaving the building</td><td>This prototype only sends synthetic data to a cloud model. A redaction layer is the seam for a later air-gapped model.</td></tr>
+      </tbody>
+    </table>
+    <h3>What a plan must explain</h3>
+    <p>Value breakdown, the constraints that are binding (for example “no bombs left at Jaisalmer”), missions left undone and why (<code>NO_QUALIFIED_CREW</code>, <code>NO_WEAPON_STOCK</code>, <code>WEATHER</code>, <code>THREAT_RISK</code>), a simple sensitivity (“if tanker T2 is lost, value drops by N”), and the timestamps of the data used.</p>
+    <p class="note">If the solver finds no solution, it reports the smallest set of rules you would have to relax. If it runs out of time, it returns the best plan so far and labels it feasible, not proven best. The audit table is append-only: who, when, which tool, which model, which seed.</p>
+  </section>
+
+  <section id="api">
+    <h2>The API, in one glance</h2>
+    <p class="lede">FastAPI. Solvers run in a process pool so a long solve does not freeze the server. Roles travel in a token. Chat is rate-limited.</p>
+    <table>
+      <thead><tr><th>You call</th><th>It does</th></tr></thead>
+      <tbody>
+        <tr><td><code>POST /v1/chat</code></td><td>Send a message. Get a session and a reply.</td></tr>
+        <tr><td><code>GET /v1/chat/{id}/stream</code></td><td>Live stream of tokens, tool calls, and “waiting for approval.”</td></tr>
+        <tr><td><code>GET /v1/plans/{id}</code></td><td>Assignments, KPIs, explanation.</td></tr>
+        <tr><td><code>POST …/approve</code> or <code>/reject</code></td><td>Commander continues or sends the draft back.</td></tr>
+        <tr><td><code>GET …/diff</code></td><td>What changed versus the previous plan.</td></tr>
+        <tr><td><code>GET /v1/data/…</code></td><td>Aircraft, crew, threats, airspace, weather, missions for the UI.</td></tr>
+        <tr><td><code>POST /v1/scenario/inject-event</code></td><td>Fire a scripted surprise.</td></tr>
+        <tr><td><code>POST /v1/scenario/clock</code></td><td>Speed up, pause, or reset the fake clock.</td></tr>
+        <tr><td><code>GET /v1/events/stream</code></td><td>Live operational events for the board.</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Services in Docker: Postgres (with PostGIS, Timescale, and vectors), Neo4j, Redis, Redpanda, MinIO, the API, the generator, and the real-feed ingestor. Grafana is optional.</p>
+  </section>
+
+  <section id="solvers">
+    <h2>Layer 3 — the toolbox</h2>
+    <p class="lede">Each algorithm is a tool with the same envelope: ok or not, data, warnings, when the data was true, a short explanation, and any error. Search to jump to one.</p>
+    <input class="search" id="q" type="search" placeholder="Search tools, e.g. tanker, fatigue, route…" aria-label="Filter tools">
+
+    <h3>Build the plan</h3>
+    <div class="tools" id="tool-list">
+      <article class="tool" data-blob="assign missions milp which aircraft fly which mission weapons range base capacity">
+        <div class="name">assign_missions</div>
+        <h3>Match jets to missions</h3>
+        <p>Pick which aircraft, with which weapon load, fly which mission, to maximise priority-weighted value. Respects range, stock, weather, crew, base capacity, and tanker needs. A yes/no linear program (MILP).</p>
+        <div class="chips"><span class="chip">MILP · PuLP / HiGHS</span><span class="chip">draft</span></div>
+      </article>
+      <article class="tool" data-blob="sortie capacity how many flights per base bottleneck fuel runway ground crew">
+        <div class="name">compute_sortie_capacity</div>
+        <h3>How many sorties can a base generate?</h3>
+        <p>Counts launches per hour limited by flyable jets, turnaround, ground crew, fuel, munitions, runway, and weather. The tightest limit is the bottleneck. Feeds the assignment tool. Pure linear program, milliseconds.</p>
+        <div class="chips"><span class="chip">LP · PuLP / HiGHS</span><span class="chip">read-only</span></div>
+      </article>
+      <article class="tool" data-blob="route planning threat weather fuel A star theta RRT path">
+        <div class="name">plan_route</div>
+        <h3>Find a path that survives</h3>
+        <p>A grid of cost: distance, threat rings, bad weather, civil traffic, terrain. A* or Theta* finds a path under a risk cap. If none exists, it returns the least-bad path and says so. Also checks fuel, including tanking.</p>
+        <div class="chips"><span class="chip">A* / Theta* / RRT*</span><span class="chip">read-only</span></div>
+      </article>
+      <article class="tool" data-blob="crew schedule duty rest fatigue qualification CP-SAT">
+        <div class="name">schedule_crew</div>
+        <h3>Put a legal person in every seat</h3>
+        <p>Qualified, current, not on leave, no overlapping duties, max duty and minimum rest. Prefers lower fatigue and fair flying hours. Two-seat jets stay paired in a squadron. Unfilled seats say why: no one qualified, not enough rest, or medical.</p>
+        <div class="chips"><span class="chip">CP-SAT · OR-Tools</span><span class="chip">draft</span></div>
+      </article>
+      <article class="tool" data-blob="weapons targets WTA kill probability stock greedy">
+        <div class="name">assign_weapons_to_targets</div>
+        <h3>Spend weapons where they matter</h3>
+        <p>Several weapons on one target have diminishing returns. A greedy pass (then a local swap) maximises expected destroyed value without emptying the wrong bunker. An exact MILP exists for smaller cases.</p>
+        <div class="chips"><span class="chip">Greedy + MILP</span><span class="chip">draft</span></div>
+      </article>
+      <article class="tool" data-blob="tanker air refuelling AAR VRP time windows IL-78">
+        <div class="name">schedule_tanker_aar</div>
+        <h3>Meet receivers with a tanker</h3>
+        <p>Vehicle routing with time windows: a few IL-78s, fuel to give away, orbits that stay outside threat rings, and receivers who must tank inside a window. Reports who did not get fuel, because those missions may have to drop.</p>
+        <div class="chips"><span class="chip">VRP · OR-Tools</span><span class="chip">draft</span></div>
+      </article>
+      <article class="tool" data-blob="airspace deconflict separation altitude civil traffic">
+        <div class="name">deconflict_airspace</div>
+        <h3>Keep flights out of each other</h3>
+        <p>Nudge departure times (within a limit) or change altitude blocks so two flights are not in the same zone at once, zone capacity holds, and civil tracks are avoided. Shifts the important missions as little as possible.</p>
+        <div class="chips"><span class="chip">CP-SAT</span><span class="chip">draft</span></div>
+      </article>
+
+      <article class="tool" data-blob="retask rolling horizon dynamic NMC SAM base closed tanker lost stability">
+        <div class="name">retask_rolling_horizon</div>
+        <h3>Repair the plan after a surprise</h3>
+        <p>Re-solves assignment on a short horizon. Airborne and imminent flights are frozen. A penalty discourages needless changes. Fast mode only frees the missions the event actually touches. Returns a diff and the change in value.</p>
+        <div class="chips"><span class="chip">Warm-started MILP</span><span class="chip">draft</span></div>
+      </article>
+      <article class="tool" data-blob="pareto tradeoff risk value fatigue munitions options">
+        <div class="name">pareto_tradeoffs</div>
+        <h3>Show a few honest options</h3>
+        <p>Value, risk, munitions, fatigue, and disruption compete. Instead of one hidden compromise, it returns up to five plans labelled roughly “max effect,” “balanced,” “min risk,” “min disruption,” plus the swap rate between them.</p>
+        <div class="chips"><span class="chip">Epsilon-constraint / NSGA-II</span><span class="chip">read-only</span></div>
+      </article>
+      <article class="tool" data-blob="reinforcement learning PPO stretch retask policy">
+        <div class="name">rl_retask</div>
+        <h3>A learned reflex (stretch)</h3>
+        <p>A policy trained to react to a sequence of failures faster than a full re-solve. Compared head to head with the math retasker. Not the system of record.</p>
+        <div class="chips"><span class="chip">PPO · stretch</span></div>
+      </article>
+
+      <article class="tool" data-blob="forecast availability FMC XGBoost 24 48 72 hours">
+        <div class="name">forecast_availability</div>
+        <h3>Will this jet still be flyable?</h3>
+        <p>Chance each aircraft is fully mission capable at 24, 48, and 72 hours, plus the expected count per base. Trained on the simulator, so plans do not count on jets that are about to break.</p>
+        <div class="chips"><span class="chip teal">XGBoost</span></div>
+      </article>
+      <article class="tool" data-blob="component failure RUL Weibull engine radar remaining life">
+        <div class="name">predict_component_rul</div>
+        <h3>When might a part fail?</h3>
+        <p>Remaining useful life for engine, radar, hydraulics, avionics. Survival curves (Weibull and Cox) give a low, typical, and high estimate of hours left.</p>
+        <div class="chips"><span class="chip teal">lifelines</span></div>
+      </article>
+      <article class="tool" data-blob="crew fatigue sleep circadian duty SAFTE">
+        <div class="name">assess_crew_fatigue</div>
+        <h3>How tired, now and later?</h3>
+        <p>A simple sleep-and-circadian model, 0 fresh to 1 unfit, plus an optional correction from a small model. Used as a limit inside crew scheduling.</p>
+        <div class="chips"><span class="chip teal">Biomath + ML</span></div>
+      </article>
+      <article class="tool" data-blob="weather impact go no-go cancel divert LightGBM">
+        <div class="name">predict_weather_impact</div>
+        <h3>Will weather stop the mission?</h3>
+        <p>Go, degraded, or no-go for a mission, using real forecast fields at the base, along the route, and at the target. Cloud hurts laser and infrared weapons more.</p>
+        <div class="chips"><span class="chip teal">LightGBM</span></div>
+      </article>
+      <article class="tool" data-blob="threat anomaly SAM moved isolation forest clustering">
+        <div class="name">detect_threat_anomalies</div>
+        <h3>Something looks unusual</h3>
+        <p>Flags a SAM that jumped, a new cluster, a spike in detections, or a track that does not fit. Alerts when two detectors agree. A hint for the planner, not an automatic retask.</p>
+        <div class="chips"><span class="chip teal">Isolation Forest · HDBSCAN</span></div>
+      </article>
+      <article class="tool" data-blob="mission success probability SHAP explanation drivers">
+        <div class="name">predict_mission_success</div>
+        <h3>Odds of effect, and of coming home</h3>
+        <p>A fast stand-in for the slow simulator. SHAP lists the drivers: threat on the route, missing SEAD, fatigue, weather, weapon fit.</p>
+        <div class="chips"><span class="chip teal">XGBoost + SHAP</span></div>
+      </article>
+      <article class="tool" data-blob="monte carlo robustness losses percentiles CVaR uncertainty">
+        <div class="name">evaluate_plan_monte_carlo</div>
+        <h3>How brittle is this plan?</h3>
+        <p>Runs the plan hundreds of times. Each run samples breakdowns, weather, delays, threat kills, and weapon hits, including cascades (lost SEAD makes the strike riskier). You see the spread: typical value, bad day (5th percentile), and expected losses.</p>
+        <div class="chips"><span class="chip teal">Monte Carlo</span></div>
+      </article>
+    </div>
+  </section>
+
+  <section id="depends">
+    <h2>How the tools connect</h2>
+    <p class="lede">Forecasts and routes feed assignment. Assignment feeds crew, weapons, tankers, and deconfliction. Stress tests and trade-offs sit on the finished draft. A surprise jumps in from the side via retask.</p>
+    <div class="dep">
+      <div class="col">
+        <div class="box">Component life</div>
+        <div class="box">Availability forecast</div>
+        <div class="box">Weather impact</div>
+        <div class="box">Route</div>
+        <div class="box">Sortie capacity</div>
+        <div class="box">Crew fatigue</div>
+      </div>
+      <div class="arr">→</div>
+      <div class="mid">Assign missions<br><span style="font-weight:500;font-size:13px">then crew, weapons, tankers, deconflict</span></div>
+      <div class="arr">→</div>
+      <div class="col">
+        <div class="box">Mission success</div>
+        <div class="box">Monte Carlo</div>
+        <div class="box">Pareto options</div>
+        <div class="box">Human approval</div>
+      </div>
+    </div>
+    <p class="note" style="margin-top:12px">Threat anomalies point at retask. Retask produces a new draft, which goes through Monte Carlo again before anyone approves it.</p>
+
+    <h3>What each surprise changes inside the math</h3>
+    <table>
+      <thead><tr><th>Event</th><th>The model does this</th></tr></thead>
+      <tbody>
+        <tr><td>Aircraft NMC</td><td>That tail’s availability becomes zero until it is estimated back.</td></tr>
+        <tr><td>New SAM</td><td>Risk map updates. Routes that cross the new ring are replanned.</td></tr>
+        <tr><td>Base closed</td><td>That base’s sortie cap is zero. Aircraft look for another runway.</td></tr>
+        <tr><td>Priority-1 request</td><td>A high-value mission is added. Lower-priority work may be bumped.</td></tr>
+        <tr><td>Tanker lost</td><td>Refuelling is rescheduled. Missions that cannot make the range may drop.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="build">
+    <h2>What to build first</h2>
+    <p class="lede">The hackathon order is the demo order: a plan you can see, then a surprise you can repair, then the forecasts that make it honest.</p>
+    <ol class="build">
+      <li><b>Core.</b> Sortie capacity, mission assignment, threat-aware routes.</li>
+      <li><b>The story.</b> Crew scheduling, rolling-horizon retask, Monte Carlo.</li>
+      <li><b>Honesty.</b> Availability forecast, weather impact, weapon-to-target assignment.</li>
+      <li><b>The rest of the package.</b> Tankers, airspace deconfliction, Pareto options.</li>
+      <li><b>Later.</b> Component life, fatigue model, threat anomalies, success model, and the reinforcement-learning stretch.</li>
+    </ol>
+    <div class="card" style="margin-top:14px">
+      <h3>Conventions every tool shares</h3>
+      <p>Pydantic in, Pydantic out. A time limit. A deterministic seed. A status, KPIs, an explanation, and <code>data_as_of</code>. Solver output is checked again by an independent validator before it is shown.</p>
+    </div>
+  </section>
+
+  <section id="glossary">
+    <h2>Glossary</h2>
+    <dl class="glossary">
+      <div><dt>FMC / PMC / NMC</dt><dd>Fully, partially, or not mission capable.</dd></div>
+      <div><dt>AOG</dt><dd>Aircraft on ground. It is not flying.</dd></div>
+      <div><dt>Sortie</dt><dd>One flight by one aircraft for a mission.</dd></div>
+      <div><dt>SEAD</dt><dd>Suppression of enemy air defences. Often must fly before a strike.</dd></div>
+      <div><dt>AAR</dt><dd>Air-to-air refuelling. A tanker gives fuel to a receiver.</dd></div>
+      <div><dt>TOT</dt><dd>Time on target. When the aircraft should be over the objective.</dd></div>
+      <div><dt>MILP</dt><dd>Mixed-integer linear program. Yes/no choices (this jet, this mission) under linear limits.</dd></div>
+      <div><dt>LP</dt><dd>Linear program. Same idea, but the answers can be fractional. Fine for “how many sorties.”</dd></div>
+      <div><dt>CP-SAT</dt><dd>Constraint solver. Good at schedules: no overlaps, duty limits, separation.</dd></div>
+      <div><dt>VRP</dt><dd>Vehicle routing problem. Here, tankers visiting refuelling points on time.</dd></div>
+      <div><dt>Pareto</dt><dd>A set of plans where improving one goal makes another worse. You choose the trade.</dd></div>
+      <div><dt>RUL</dt><dd>Remaining useful life of a component, in flight hours.</dd></div>
+      <div><dt>Monte Carlo</dt><dd>Repeat the plan with random failures and weather. The spread is the answer.</dd></div>
+      <div><dt>HITL</dt><dd>Human in the loop. The graph pauses until a person approves.</dd></div>
+      <div><dt>RORO</dt><dd>Receive an object, return an object. One schema in, one schema out.</dd></div>
+      <div><dt>SoR</dt><dd>System of record. The store that owns a fact. Here, Postgres.</dd></div>
+    </dl>
+  </section>
+
+  <footer>
+    Drawn from the GARUDA design docs: overview, data layer (including synthetic generation), LLM harness, and the optimization index. All force data in those docs is synthetic and unclassified.
+  </footer>
+</main>
+<script>
+  const q = document.getElementById('q');
+  const cards = [...document.querySelectorAll('#tool-list .tool')];
+  q.addEventListener('input', () => {
+    const s = q.value.trim().toLowerCase();
+    for (const card of cards) {
+      const hay = (card.dataset.blob + ' ' + card.innerText).toLowerCase();
+      card.classList.toggle('hidden', s && !hay.includes(s));
+    }
+  });
+</script>
+</body>
+</html>
