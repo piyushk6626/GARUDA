@@ -1,6 +1,7 @@
 import asyncpg
 
 from garuda.schemas.mission import Mission, Target
+from garuda.schemas.threat import Threat, ThreatTrack
 
 
 def asyncpg_dsn(url: str) -> str:
@@ -9,13 +10,23 @@ def asyncpg_dsn(url: str) -> str:
     return url
 
 
-async def seed_postgres(dsn: str, targets: list[Target], missions: list[Mission]) -> None:
+async def seed_postgres(
+    dsn: str,
+    targets: list[Target],
+    missions: list[Mission],
+    threats: list[Threat],
+    tracks: list[ThreatTrack],
+) -> None:
     connection = await asyncpg.connect(asyncpg_dsn(dsn))
     try:
         async with connection.transaction():
-            await connection.execute("TRUNCATE plan_assignment, plan, mission, target")
+            await connection.execute(
+                "TRUNCATE plan_assignment, plan, mission, target, threat_track, threat"
+            )
             await _insert_targets(connection, targets)
             await _insert_missions(connection, missions)
+            await _insert_threats(connection, threats)
+            await _insert_tracks(connection, tracks)
     finally:
         await connection.close()
 
@@ -78,5 +89,59 @@ async def _insert_missions(connection: asyncpg.Connection, missions: list[Missio
                 mission.dependencies,
             )
             for mission in missions
+        ],
+    )
+
+
+async def _insert_threats(connection: asyncpg.Connection, threats: list[Threat]) -> None:
+    await connection.executemany(
+        """
+        INSERT INTO threat (
+            threat_id, type, position, mobile, engagement_range_km, detection_range_km,
+            min_alt_ft, max_alt_ft, pk_base, confidence, first_seen, last_seen, status
+        )
+        VALUES (
+            $1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6, $7,
+            $8, $9, $10, $11, $12, $13, $14
+        )
+        """,
+        [
+            (
+                threat.threat_id,
+                threat.type,
+                threat.lon,
+                threat.lat,
+                threat.mobile,
+                threat.engagement_range_km,
+                threat.detection_range_km,
+                threat.min_alt_ft,
+                threat.max_alt_ft,
+                threat.pk_base,
+                threat.confidence,
+                threat.first_seen,
+                threat.last_seen,
+                threat.status,
+            )
+            for threat in threats
+        ],
+    )
+
+
+async def _insert_tracks(connection: asyncpg.Connection, tracks: list[ThreatTrack]) -> None:
+    await connection.executemany(
+        """
+        INSERT INTO threat_track (time, threat_id, geom, speed_kts, heading)
+        VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6)
+        """,
+        [
+            (
+                track.time,
+                track.threat_id,
+                track.lon,
+                track.lat,
+                track.speed_kts,
+                track.heading,
+            )
+            for track in tracks
         ],
     )

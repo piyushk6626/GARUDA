@@ -1,10 +1,11 @@
 from neo4j import AsyncGraphDatabase
 
 from garuda.schemas.mission import Mission, Target
+from garuda.schemas.threat import Threat
 
 _CLEAR = """
 MATCH (n)
-WHERE n:Mission OR n:Target
+WHERE n:Mission OR n:Target OR n:Threat
 DETACH DELETE n
 """
 
@@ -36,6 +37,26 @@ MATCH (t:Target {target_id: row.target_id})
 MERGE (m)-[:TARGETS]->(t)
 """
 
+_THREATS = """
+UNWIND $rows AS row
+MERGE (th:Threat {threat_id: row.threat_id})
+SET th.type = row.type,
+    th.lat = row.lat,
+    th.lon = row.lon,
+    th.range_km = row.range_km,
+    th.confidence = row.confidence,
+    th.last_seen = row.last_seen,
+    th.status = row.status,
+    th.mobile = row.mobile
+"""
+
+_COVERS = """
+UNWIND $rows AS row
+MATCH (th:Threat {threat_id: row.threat_id})
+MATCH (t:Target {target_id: row.target_id})
+MERGE (th)-[:COVERS]->(t)
+"""
+
 
 async def sync_neo4j(
     uri: str,
@@ -43,6 +64,7 @@ async def sync_neo4j(
     password: str,
     targets: list[Target],
     missions: list[Mission],
+    threats: list[Threat],
 ) -> None:
     driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
     try:
@@ -51,18 +73,29 @@ async def sync_neo4j(
                 _write_graph,
                 _target_rows(targets),
                 _mission_rows(missions),
+                _threat_rows(threats),
+                _cover_rows(targets),
             )
     finally:
         await driver.close()
 
 
-async def _write_graph(tx, target_rows: list[dict], mission_rows: list[dict]) -> None:
+async def _write_graph(
+    tx,
+    target_rows: list[dict],
+    mission_rows: list[dict],
+    threat_rows: list[dict],
+    cover_rows: list[dict],
+) -> None:
     await _consume(tx, _CLEAR)
     await _consume(tx, _TARGETS, rows=target_rows)
     await _consume(tx, _MISSIONS, rows=mission_rows)
+    await _consume(tx, _THREATS, rows=threat_rows)
     linked = [row for row in mission_rows if row["target_id"] is not None]
     if linked:
         await _consume(tx, _LINKS, rows=linked)
+    if cover_rows:
+        await _consume(tx, _COVERS, rows=cover_rows)
 
 
 async def _consume(tx, query: str, **kwargs: object) -> None:
@@ -81,6 +114,31 @@ def _target_rows(targets: list[Target]) -> list[dict]:
             "hardness": target.hardness,
         }
         for target in targets
+    ]
+
+
+def _threat_rows(threats: list[Threat]) -> list[dict]:
+    return [
+        {
+            "threat_id": threat.threat_id,
+            "type": threat.type,
+            "lat": threat.lat,
+            "lon": threat.lon,
+            "range_km": threat.engagement_range_km,
+            "confidence": threat.confidence,
+            "last_seen": threat.last_seen.isoformat(),
+            "status": threat.status,
+            "mobile": threat.mobile,
+        }
+        for threat in threats
+    ]
+
+
+def _cover_rows(targets: list[Target]) -> list[dict]:
+    return [
+        {"threat_id": threat_id, "target_id": target.target_id}
+        for target in targets
+        for threat_id in target.defended_by
     ]
 
 

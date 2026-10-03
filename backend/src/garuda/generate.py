@@ -8,7 +8,7 @@ from garuda.storage.seed import write_all
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Generate and seed GARUDA missions")
+    parser = argparse.ArgumentParser(description="Generate and seed GARUDA missions and threats")
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
@@ -19,7 +19,9 @@ def main(argv: list[str] | None = None) -> None:
     scenario = build_scenario(config, seed)
     if args.dry_run:
         print(
-            f"seed={scenario.seed} targets={len(scenario.targets)} missions={len(scenario.missions)}"
+            f"seed={scenario.seed} targets={len(scenario.targets)} "
+            f"missions={len(scenario.missions)} threats={len(scenario.threats)} "
+            f"tracks={len(scenario.tracks)}"
         )
         return
 
@@ -27,7 +29,8 @@ def main(argv: list[str] | None = None) -> None:
     print(
         "seeded "
         f"targets={result.targets} missions={result.missions} "
-        f"pending={result.pending} events={result.events}"
+        f"pending={result.pending} events={result.events} "
+        f"threats={result.threats} tracks={result.tracks}"
     )
 
 

@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from garuda.schemas.threat import Threat, ThreatTrack
+
 TargetClass = Literal["RUNWAY", "RADAR", "BRIDGE", "ARMOUR", "C2", "FUEL_DEPOT"]
 MissionType = Literal["DCA", "CAP", "STRIKE", "SEAD", "CAS", "ISR", "AAR", "AIRLIFT", "SAR"]
 MissionEffect = Literal["DESTROY", "SUPPRESS", "OBSERVE", "DENY"]
@@ -71,3 +73,5 @@ class GeneratedScenario(BaseModel):
     seed: int
     targets: list[Target]
     missions: list[Mission]
+    threats: list[Threat]
+    tracks: list[ThreatTrack]

@@ -14,6 +14,7 @@ from shapely.geometry import Polygon
 
 from garuda.config import ScenarioConfig
 from garuda.generators.targets import build_targets
+from garuda.generators.threats import build_threats, suppress_sead_site
 from garuda.schemas.mission import GeneratedScenario, Mission, MissionEffect, MissionType, Target
 
 PRIORITY_WEIGHTS: dict[int, float] = {1: 0.10, 2: 0.20, 3: 0.35, 4: 0.25, 5: 0.10}
@@ -78,9 +79,17 @@ TARGET_POLICY = {
 
 def build_scenario(config: ScenarioConfig, seed: int) -> GeneratedScenario:
     rng = np.random.default_rng(seed)
-    targets = build_targets(config, rng)
+    threats, tracks, clusters = build_threats(config, rng)
+    targets = build_targets(config, rng, clusters)
     missions = _build_missions(config, seed, rng, targets)
-    return GeneratedScenario(seed=seed, targets=targets, missions=missions)
+    suppress_sead_site(threats, missions, targets)
+    return GeneratedScenario(
+        seed=seed,
+        targets=targets,
+        missions=missions,
+        threats=threats,
+        tracks=tracks,
+    )
 
 
 def _build_missions(

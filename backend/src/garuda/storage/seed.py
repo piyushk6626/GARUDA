@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 
 from garuda.schemas.mission import GeneratedScenario
-from garuda.storage.kafka_publish import publish_missions
+from garuda.storage.kafka_publish import publish_missions, publish_threats
 from garuda.storage.neo4j_sync import sync_neo4j
 from garuda.storage.postgres import seed_postgres
 from garuda.storage.redis_seed import seed_redis
@@ -14,6 +14,9 @@ class SeedResult:
     missions: int
     pending: int
     events: int
+    threats: int
+    tracks: int
+    active_threats: int
 
 
 def postgres_dsn() -> str:
@@ -37,14 +40,24 @@ def kafka_bootstrap() -> str:
 
 
 async def write_all(scenario: GeneratedScenario) -> SeedResult:
-    await seed_postgres(postgres_dsn(), scenario.targets, scenario.missions)
+    await seed_postgres(
+        postgres_dsn(),
+        scenario.targets,
+        scenario.missions,
+        scenario.threats,
+        scenario.tracks,
+    )
     uri, user, password = neo4j_settings()
-    await sync_neo4j(uri, user, password, scenario.targets, scenario.missions)
-    pending = await seed_redis(redis_url(), scenario.missions)
+    await sync_neo4j(uri, user, password, scenario.targets, scenario.missions, scenario.threats)
+    pending, active = await seed_redis(redis_url(), scenario.missions, scenario.threats)
     events = await publish_missions(kafka_bootstrap(), scenario.missions)
+    events += await publish_threats(kafka_bootstrap(), scenario.threats)
     return SeedResult(
         targets=len(scenario.targets),
         missions=len(scenario.missions),
         pending=pending,
         events=events,
+        threats=len(scenario.threats),
+        tracks=len(scenario.tracks),
+        active_threats=active,
     )
