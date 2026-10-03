@@ -5,7 +5,9 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 config = context.config
-if dsn := os.getenv("ADSB_POSTGRES_DSN"):
+# A generic DSN lets domain stacks reuse the single migration chain.  ADS-B's
+# setting remains the fallback so its existing commands keep their behaviour.
+if dsn := os.getenv("GARUDA_POSTGRES_DSN") or os.getenv("ADSB_POSTGRES_DSN"):
     config.set_main_option("sqlalchemy.url", dsn.replace("postgresql://", "postgresql+psycopg://", 1))
 
 if context.is_offline_mode():

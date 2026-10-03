@@ -1,7 +1,7 @@
 [project]
-name = "garuda-adsb"
+name = "garuda"
 version = "0.1.0"
-description = "GARUDA ADS-B ingestion, replay, and query data layer"
+description = "GARUDA ADS-B and aircraft availability data layers"
 requires-python = ">=3.13"
 dependencies = [
   "aiokafka==0.12.0",
@@ -10,10 +10,13 @@ dependencies = [
   "boto3==1.40.45",
   "httpx==0.28.1",
   "numpy==2.3.3",
+  "neo4j==5.28.2",
   "pydantic==2.11.9",
   "pydantic-settings==2.10.1",
+  "PyYAML==6.0.2",
   "psycopg[binary]==3.2.10",
   "redis==6.4.0",
+  "simpy==4.1.1",
   "sqlalchemy==2.0.43",
 ]
 
@@ -22,6 +25,7 @@ dev = ["pytest==8.4.2", "pytest-asyncio==1.2.0"]
 
 [project.scripts]
 garuda-adsb = "backend.app.cli:main"
+garuda-aircraft = "backend.app.aircraft_cli:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

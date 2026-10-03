@@ -1,0 +1,116 @@
+name: garuda-aircraft
+
+services:
+  timescaledb:
+    platform: linux/amd64
+    build: {context: ../.., dockerfile: infra/aircraft/timescaledb/Dockerfile}
+    environment:
+      POSTGRES_USER: ${AIRCRAFT_PG_USER:-garuda}
+      POSTGRES_PASSWORD: ${AIRCRAFT_PG_PASSWORD:-garuda-aircraft-local-only}
+      POSTGRES_DB: ${AIRCRAFT_PG_DATABASE:-garuda_aircraft}
+    command: [postgres, -c, shared_preload_libraries=timescaledb]
+    ports: ["127.0.0.1:${AIRCRAFT_PG_PORT:-25432}:5432"]
+    volumes: [timescaledb-data:/home/postgres/pgdata/data]
+    networks: [aircraft]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  redis:
+    platform: linux/amd64
+    build: {context: ../.., dockerfile: infra/aircraft/redis/Dockerfile}
+    command: [redis-server, /usr/local/etc/redis/redis.conf, --requirepass, "${AIRCRAFT_REDIS_PASSWORD:-garuda-aircraft-redis-local-only}"]
+    environment:
+      REDISCLI_AUTH: "${AIRCRAFT_REDIS_PASSWORD:-garuda-aircraft-redis-local-only}"
+    ports: ["127.0.0.1:${AIRCRAFT_REDIS_PORT:-26379}:6379"]
+    volumes: [redis-data:/data]
+    networks: [aircraft]
+    healthcheck: {test: [CMD, redis-cli, ping], interval: 5s, timeout: 5s, retries: 30}
+  neo4j:
+    platform: linux/amd64
+    build: {context: ../.., dockerfile: infra/aircraft/neo4j/Dockerfile}
+    environment:
+      NEO4J_AUTH: neo4j/${AIRCRAFT_NEO4J_PASSWORD:-garuda-aircraft-neo4j-local-only}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+    ports: ["127.0.0.1:${AIRCRAFT_NEO4J_BOLT_PORT:-27687}:7687", "127.0.0.1:${AIRCRAFT_NEO4J_HTTP_PORT:-27474}:7474"]
+    volumes: [neo4j-data:/data, neo4j-logs:/logs]
+    networks: [aircraft]
+    healthcheck:
+      test: [CMD-SHELL, 'cypher-shell -a bolt://localhost:7687 -u neo4j -p "$${NEO4J_AUTH#*/}" "RETURN 1" >/dev/null']
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+  redpanda:
+    platform: linux/amd64
+    build: {context: ../.., dockerfile: infra/aircraft/redpanda/Dockerfile}
+    command: [redpanda, start, --mode=dev-container, --smp=1, --memory=1G, --reserve-memory=0M, "--kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:29092", "--advertise-kafka-addr=internal://redpanda:9092,external://localhost:29092", --rpc-addr=0.0.0.0:33145, --advertise-rpc-addr=redpanda:33145]
+    ports: ["127.0.0.1:${AIRCRAFT_KAFKA_PORT:-29092}:29092"]
+    volumes: [redpanda-data:/var/lib/redpanda/data]
+    networks: [aircraft]
+    healthcheck: {test: [CMD, rpk, cluster, health, --exit-when-healthy], interval: 5s, timeout: 10s, retries: 30, start_period: 20s}
+  aircraft-migrate:
+    profiles: [app, test]
+    build: {context: ../.., dockerfile: infra/aircraft/app/Dockerfile}
+    command: [uv, run, alembic, upgrade, head]
+    environment:
+      GARUDA_POSTGRES_DSN: "postgresql://${AIRCRAFT_PG_USER:-garuda}:${AIRCRAFT_PG_PASSWORD:-garuda-aircraft-local-only}@timescaledb:5432/${AIRCRAFT_PG_DATABASE:-garuda_aircraft}"
+    depends_on: {timescaledb: {condition: service_healthy}}
+    networks: [aircraft]
+    restart: "no"
+  redpanda-init:
+    build: {context: ../.., dockerfile: infra/aircraft/redpanda/Dockerfile}
+    entrypoint: [/bin/sh, /opt/garuda/init-topics.sh]
+    depends_on: {redpanda: {condition: service_healthy}}
+    networks: [aircraft]
+    restart: "no"
+  neo4j-init:
+    build: {context: ../.., dockerfile: infra/aircraft/neo4j/Dockerfile}
+    entrypoint: [/bin/sh, -c, 'cypher-shell -a bolt://neo4j:7687 -u neo4j -p "$$AIRCRAFT_NEO4J_PASSWORD" -f /opt/garuda/constraints.cypher']
+    environment:
+      AIRCRAFT_NEO4J_PASSWORD: "${AIRCRAFT_NEO4J_PASSWORD:-garuda-aircraft-neo4j-local-only}"
+    depends_on: {neo4j: {condition: service_healthy}}
+    networks: [aircraft]
+    restart: "no"
+  aircraft-worker:
+    profiles: [app]
+    build: {context: ../.., dockerfile: infra/aircraft/app/Dockerfile}
+    command: [uv, run, garuda-aircraft, worker, outbox]
+    environment:
+      GARUDA_POSTGRES_DSN: "postgresql://${AIRCRAFT_PG_USER:-garuda}:${AIRCRAFT_PG_PASSWORD:-garuda-aircraft-local-only}@timescaledb:5432/${AIRCRAFT_PG_DATABASE:-garuda_aircraft}"
+      AIRCRAFT_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      AIRCRAFT_REDIS_URL: redis://:${AIRCRAFT_REDIS_PASSWORD:-garuda-aircraft-redis-local-only}@redis:6379/0
+      AIRCRAFT_NEO4J_URI: bolt://neo4j:7687
+      AIRCRAFT_NEO4J_PASSWORD: ${AIRCRAFT_NEO4J_PASSWORD:-garuda-aircraft-neo4j-local-only}
+    depends_on:
+      aircraft-migrate: {condition: service_completed_successfully}
+      redpanda-init: {condition: service_completed_successfully}
+      neo4j-init: {condition: service_completed_successfully}
+    networks: [aircraft]
+  store-tests:
+    profiles: [test]
+    build: {context: ../.., dockerfile: infra/aircraft/tests/Dockerfile}
+    environment:
+      AIRCRAFT_PG_HOST: timescaledb
+      AIRCRAFT_PG_PORT: "5432"
+      AIRCRAFT_PG_USER: ${AIRCRAFT_PG_USER:-garuda}
+      AIRCRAFT_PG_PASSWORD: ${AIRCRAFT_PG_PASSWORD:-garuda-aircraft-local-only}
+      AIRCRAFT_PG_DATABASE: ${AIRCRAFT_PG_DATABASE:-garuda_aircraft}
+      AIRCRAFT_REDIS_HOST: redis
+      AIRCRAFT_REDIS_PORT: "6379"
+      AIRCRAFT_REDIS_PASSWORD: ${AIRCRAFT_REDIS_PASSWORD:-garuda-aircraft-redis-local-only}
+      AIRCRAFT_NEO4J_URI: bolt://neo4j:7687
+      AIRCRAFT_NEO4J_PASSWORD: ${AIRCRAFT_NEO4J_PASSWORD:-garuda-aircraft-neo4j-local-only}
+      AIRCRAFT_KAFKA_BROKERS: redpanda:9092
+    depends_on:
+      aircraft-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      redpanda-init: {condition: service_completed_successfully}
+      neo4j-init: {condition: service_completed_successfully}
+    networks: [aircraft]
+
+networks: {aircraft: {name: garuda-aircraft-network}}
+volumes: {timescaledb-data: {}, redis-data: {}, neo4j-data: {}, neo4j-logs: {}, redpanda-data: {}}
