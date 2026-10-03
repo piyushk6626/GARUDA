@@ -32,24 +32,41 @@ async def _seed_roundtrip() -> None:
     assert result.threats == len(scenario.threats)
     assert result.tracks == len(scenario.tracks)
     assert result.active_threats == sum(threat.status == "ACTIVE" for threat in scenario.threats)
-    assert result.events == len(scenario.missions) + len(scenario.threats)
+    assert result.weapons == len(scenario.weapons)
+    assert result.stocks == len(scenario.stocks)
+    assert result.load_configs == len(scenario.load_configs)
+    assert result.compatibilities == len(scenario.compatibilities)
+    assert result.stock_keys == len(scenario.stocks)
+    assert result.events == len(scenario.missions) + len(scenario.threats) + len(scenario.stocks)
 
     connection = await asyncpg.connect(os.environ["DATABASE_URL"])
     try:
         stored = await connection.fetchval("SELECT count(*) FROM mission")
         stored_threats = await connection.fetchval("SELECT count(*) FROM threat")
         stored_tracks = await connection.fetchval("SELECT count(*) FROM threat_track")
+        stored_weapons = await connection.fetchval("SELECT count(*) FROM weapon_type")
+        stored_stocks = await connection.fetchval("SELECT count(*) FROM weapon_stock")
+        stored_loads = await connection.fetchval("SELECT count(*) FROM load_config")
+        stored_compat = await connection.fetchval("SELECT count(*) FROM weapon_compatibility")
     finally:
         await connection.close()
     assert stored == len(scenario.missions)
     assert stored_threats == len(scenario.threats)
     assert stored_tracks == len(scenario.tracks)
+    assert stored_weapons == len(scenario.weapons)
+    assert stored_stocks == len(scenario.stocks)
+    assert stored_loads == len(scenario.load_configs)
+    assert stored_compat == len(scenario.compatibilities)
 
     client = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
     try:
         pending = await client.zcard("missions:pending")
         active = await client.zcard("threat:active")
+        sample = scenario.stocks[0]
+        stored_qty = await client.get(f"stock:{sample.base_id}:{sample.weapon_code}")
     finally:
         await client.aclose()
     assert pending == len(scenario.missions)
     assert active == result.active_threats
+    assert stored_qty is not None
+    assert int(stored_qty) == sample.quantity

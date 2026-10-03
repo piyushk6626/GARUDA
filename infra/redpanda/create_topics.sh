@@ -21,3 +21,4 @@ create_topic() {
 create_topic garuda.mission.request
 create_topic garuda.plan.event
 create_topic garuda.threat.update
+create_topic garuda.weapons.stock

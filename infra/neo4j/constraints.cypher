@@ -2,3 +2,6 @@ CREATE CONSTRAINT mission_pk IF NOT EXISTS FOR (m:Mission) REQUIRE m.mission_id 
 CREATE CONSTRAINT target_pk IF NOT EXISTS FOR (t:Target) REQUIRE t.target_id IS UNIQUE;
 CREATE CONSTRAINT plan_pk IF NOT EXISTS FOR (p:Plan) REQUIRE p.plan_id IS UNIQUE;
 CREATE CONSTRAINT threat_pk IF NOT EXISTS FOR (th:Threat) REQUIRE th.threat_id IS UNIQUE;
+CREATE CONSTRAINT weapon_type_pk IF NOT EXISTS FOR (w:WeaponType) REQUIRE w.weapon_code IS UNIQUE;
+CREATE CONSTRAINT weapon_stock_pk IF NOT EXISTS FOR (s:WeaponStock) REQUIRE s.stock_id IS UNIQUE;
+CREATE CONSTRAINT base_pk IF NOT EXISTS FOR (b:Base) REQUIRE b.base_id IS UNIQUE;
