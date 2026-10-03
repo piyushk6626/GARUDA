@@ -1,0 +1,20 @@
+seed: 42
+horizon_hours: 72
+start: "2026-10-03T00:00:00Z"
+bases: 7
+fleet:
+  Su-30MKI: 40
+  Rafale: 24
+  Tejas: 24
+  Mirage-2000: 18
+  Jaguar: 12
+  C-130J: 8
+  IL-78: 6
+  AEW: 4
+  Heli: 14
+crew_per_airframe: 2.0
+events:
+  - {t: 6, type: aircraft_nmc, count: 3}
+  - {t: 14, type: new_sam, near: B2}
+  - {t: 20, type: base_closed, base: B5, reason: fog}
+  - {t: 30, type: p1_request}

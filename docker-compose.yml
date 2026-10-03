@@ -18,10 +18,9 @@ services:
       - -c
       - timescaledb.telemetry_level=off
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -140,7 +139,9 @@ services:
     entrypoint: ["bash", "/create_topics.sh"]
 
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # Official minio/* images were removed from Docker Hub. Chainguard still
+    # publishes a MinIO server image; the bucket is created with the AWS CLI.
+    image: cgr.dev/chainguard/minio:latest@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
@@ -152,19 +153,20 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "/usr/bin/minio", "--version"]
       interval: 5s
       timeout: 5s
-      retries: 30
-      start_period: 10s
+      retries: 20
+      start_period: 5s
 
   minio-init:
-    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    image: amazon/aws-cli:2.27.41
     profiles: ["init"]
     depends_on:
       minio:
         condition: service_healthy
     environment:
+      MINIO_ENDPOINT: http://minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-garuda}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-garuda-secret}
     volumes:
