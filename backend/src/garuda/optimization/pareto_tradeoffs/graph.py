@@ -1,9 +1,33 @@
-"""LangGraph skeleton for `pareto_tradeoffs`.
+"""Optional LangGraph adapter for the implemented tool."""
 
-Straight line: build_problem -> solve -> explain. The last node always emits `STUB_OUTPUT`.
-"""
+from typing import Any, TypedDict
 
-from garuda.optimization.pareto_tradeoffs.tool import STUB_OUTPUT
-from garuda.tools.adapters.langgraph import compile_tool_graph
+from langgraph.graph import END, StateGraph
 
-GRAPH = compile_tool_graph(steps=("build_problem", "solve", "explain"), output=STUB_OUTPUT)
+from garuda.contracts.tool import ToolContext
+from garuda.optimization.pareto_tradeoffs.schemas import ParetoTradeoffsInput
+from garuda.optimization.pareto_tradeoffs.tool import pareto_tradeoffs
+
+
+class State(TypedDict, total=False):
+    payload: dict[str, Any]
+    ctx: ToolContext
+    output: dict[str, Any]
+
+
+async def run(state: State):
+    result = await pareto_tradeoffs(
+        ParetoTradeoffsInput.model_validate(state["payload"]), state["ctx"]
+    )
+    return {"output": result.model_dump(mode="json")}
+
+
+def _graph():
+    graph = StateGraph(State)
+    graph.add_node("pareto_tradeoffs", run)
+    graph.set_entry_point("pareto_tradeoffs")
+    graph.add_edge("pareto_tradeoffs", END)
+    return graph.compile()
+
+
+GRAPH = _graph()
