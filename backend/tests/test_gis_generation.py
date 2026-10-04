@@ -1,13 +1,16 @@
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 import rasterio
 from shapely import wkt as shapely_wkt
+from shapely.geometry import Point, shape
 
 from garuda.config import BoundingBox, load_config
 from garuda.generators.gis import (
     AIRPORTS_CSV,
+    FIXTURE_DIR,
     RUNWAYS_CSV,
     build_bases,
     build_features,
@@ -78,6 +81,15 @@ def test_features_include_cities_roads_river_and_border() -> None:
     assert scenario.borders[0].kind == "international"
     assert scenario.borders[0].wkt.startswith("MULTILINESTRING")
     assert len(scenario.distances) == len(scenario.bases) * len(scenario.targets)
+
+
+def test_india_outline_includes_kashmir_and_ladakh() -> None:
+    payload = json.loads((FIXTURE_DIR / "india_outline.geojson").read_text())
+    outline = shape(payload["features"][0]["geometry"])
+    assert outline.contains(Point(74.80, 34.08))  # Srinagar
+    assert outline.contains(Point(77.58, 34.16))  # Leh
+    assert outline.contains(Point(74.31, 35.92))  # Gilgit, inside the Indian claim
+    assert outline.bounds[3] > 36.5
 
 
 def test_terrain_grid_is_one_kilometre_and_seed_stable() -> None:

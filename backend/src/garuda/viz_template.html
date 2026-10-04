@@ -5,20 +5,309 @@
 <title>GARUDA data layer</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-  body { margin: 0; font: 13px system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
-  header { padding: 6px 12px; background: #14213d; color: #fff; }
-  header span { margin-right: 12px; white-space: nowrap; }
-  main { flex: 1; display: flex; min-height: 0; }
-  #map { flex: 3; }
-  aside { flex: 2; display: flex; flex-direction: column; min-width: 380px; border-left: 1px solid #ccc; }
-  nav { display: flex; flex-wrap: wrap; background: #eee; }
-  nav button { border: 0; padding: 6px 10px; background: none; cursor: pointer; }
-  nav button.on { background: #fff; font-weight: 600; }
-  #panel { flex: 1; overflow: auto; padding: 8px; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { border-bottom: 1px solid #ddd; padding: 2px 6px; text-align: left; white-space: nowrap; }
-  th { position: sticky; top: 0; background: #fafafa; cursor: pointer; }
-  .bar { display: inline-block; height: 10px; background: #3a86ff; vertical-align: middle; }
+  :root {
+    --ink: #152033;
+    --muted: #5e7086;
+    --line: #e3e9f0;
+    --line-strong: #d5dee8;
+    --bg: #e8eef4;
+    --card: #fff;
+    --header: #0c1726;
+    --accent: #1d4e89;
+    --ok: #0f7a3a;
+    --ok-bg: #e5f6eb;
+    --warn: #8a5a00;
+    --warn-bg: #fff3d6;
+    --bad: #a32018;
+    --bad-bg: #fde8e6;
+    --info: #1a4f86;
+    --info-bg: #e7f0fa;
+    --neutral: #314256;
+    --neutral-bg: #eef2f6;
+    --muted-bg: #f1f4f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--header);
+    font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    padding: 10px 16px;
+    color: #e7eef6;
+    min-height: 54px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; flex: none; }
+  .mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: #1d4e89;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: -0.03em;
+  }
+  .brand strong { display: block; letter-spacing: 0.14em; font-size: 12px; }
+  .brand em { display: block; margin-top: 1px; font-style: normal; color: #8ea0b8; font-size: 11px; }
+  .seed {
+    flex: none;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #16263c;
+    border: 1px solid #2a3e5c;
+    color: #c5d2e2;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .metrics {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-left: auto;
+    min-width: 0;
+  }
+  .metric {
+    flex: none;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: #142338;
+    border: 1px solid #243652;
+    color: #9aafc4;
+    font-size: 11px;
+  }
+  .metric b { color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; }
+  main { flex: 1; display: flex; min-height: 0; background: var(--bg); }
+  #map { flex: 1; min-width: 0; }
+  aside {
+    flex: 1.2;
+    display: flex;
+    flex-direction: column;
+    min-width: 520px;
+    max-width: 62%;
+    background: var(--bg);
+    border-left: 1px solid #d5dee8;
+  }
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 6px 8px 0;
+    border-bottom: 1px solid var(--line);
+    background: #f7f9fb;
+    flex: none;
+  }
+  nav button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    padding: 8px 9px 10px;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    font: 600 12.5px/1 ui-sans-serif, system-ui, sans-serif;
+    white-space: nowrap;
+  }
+  nav button:hover { color: var(--ink); }
+  nav button.on { background: var(--bg); color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
+  #panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    overflow: hidden;
+  }
+  .summary, .table-card, .note {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(16, 32, 51, 0.04);
+  }
+  .note { margin: 0; padding: 10px 14px; color: #3d5168; flex: none; }
+  .summary { padding: 12px 14px 10px; flex: none; }
+  .summary h2, .toolbar h2 {
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px 16px; margin-top: 10px; }
+  .bar-row { display: grid; grid-template-columns: 92px 1fr 36px; align-items: center; gap: 8px; min-width: 0; }
+  .bar-label { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { height: 7px; border-radius: 99px; background: #e7edf3; overflow: hidden; }
+  .bar-fill { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
+  .bar-value { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+  .table-card { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    flex: none;
+  }
+  .toolbar input {
+    margin-left: auto;
+    width: min(220px, 40%);
+    border: 1px solid var(--line-strong);
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font: inherit;
+    color: var(--ink);
+  }
+  .toolbar input:focus { outline: 2px solid #c5d7ee; border-color: var(--accent); }
+  .count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; }
+  .table-scroll { flex: 1; overflow: auto; }
+  .table-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+  .table-scroll::-webkit-scrollbar-thumb { background: #c5d0dc; border-radius: 99px; border: 2px solid #fff; }
+  table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 12.5px; }
+  th, td { padding: 6px 7px; text-align: left; border-bottom: 1px solid #eef2f6; vertical-align: middle; }
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f8fafc;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    box-shadow: inset 0 -1px 0 var(--line);
+  }
+  th:hover { color: var(--ink); }
+  th.sorted { color: var(--accent); }
+  .caret { margin-left: 4px; font-size: 8px; }
+  td { color: #1c2a3a; white-space: nowrap; }
+  td.id { font-weight: 600; color: #0f2744; }
+  td.wrap { white-space: normal; min-width: 160px; max-width: 260px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mid, th.mid { text-align: center; }
+  tbody tr:hover td { background: #f3f7fc; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .empty-row td { text-align: center; color: var(--muted); padding: 28px 12px; font-weight: 500; }
+  .dash { color: #b0bcc8; }
+  .time { color: #3d5168; font-variant-numeric: tabular-nums; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.45;
+    background: var(--neutral-bg);
+    color: var(--neutral);
+  }
+  .badge.ok { color: var(--ok); background: var(--ok-bg); }
+  .badge.warn { color: var(--warn); background: var(--warn-bg); }
+  .badge.bad { color: var(--bad); background: var(--bad-bg); }
+  .badge.info { color: var(--info); background: var(--info-bg); }
+  .badge.muted { color: #526173; background: var(--muted-bg); }
+  .pri {
+    display: inline-grid;
+    place-items: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    background: var(--neutral-bg);
+    color: var(--neutral);
+  }
+  .pri.p1 { background: var(--bad-bg); color: var(--bad); }
+  .pri.p2 { background: #ffe8d2; color: #9a3412; }
+  .pri.p3 { background: var(--warn-bg); color: var(--warn); }
+  .pri.p4 { background: var(--info-bg); color: var(--info); }
+  .pri.p5 { background: var(--muted-bg); color: #526173; }
+  .meter {
+    display: inline-block;
+    width: 36px;
+    height: 6px;
+    margin-right: 6px;
+    border-radius: 99px;
+    background: #e6ebf1;
+    vertical-align: middle;
+    overflow: hidden;
+  }
+  .meter > span { display: block; height: 100%; border-radius: 99px; }
+  .leaflet-tooltip.tac {
+    background: rgba(12, 23, 38, 0.9);
+    color: #f4f7fb;
+    border: 0;
+    border-radius: 4px;
+    padding: 2px 5px;
+    font: 600 10px/1.3 ui-monospace, "SF Mono", monospace;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    white-space: nowrap;
+  }
+  .leaflet-tooltip.tac::before { display: none; }
+  .pin, .ac { background: transparent; border: 0; }
+  .pin i {
+    display: block;
+    width: 9px;
+    height: 9px;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  }
+  .pin.base i { border-radius: 2px; background: #1d4e89; }
+  .pin.target i { border-radius: 1px; background: #ffd60a; transform: rotate(45deg); }
+  .pin.threat i { border-radius: 99px; }
+  .ac span {
+    display: block;
+    width: 0;
+    height: 0;
+    margin: 2px auto 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 12px solid #0b3a75;
+    filter: drop-shadow(0 0 1px #fff);
+  }
+  .map-hud, .legend {
+    background: rgba(12, 23, 38, 0.9);
+    color: #d5e2f0;
+    border-radius: 8px;
+    font: 600 11px/1.35 ui-monospace, "SF Mono", monospace;
+  }
+  .map-hud { padding: 4px 8px; }
+  .legend { padding: 8px 10px; }
+  .legend b { display: block; margin-bottom: 4px; letter-spacing: 0.08em; font-size: 10px; color: #9fb0c4; }
+  .legend div { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+  .legend i { width: 10px; height: 10px; border: 1px solid rgba(255, 255, 255, 0.7); flex: none; }
+  .legend i.ring { background: transparent; border: 1px dashed #e85d4c; border-radius: 99px; }
+  .leaflet-control-layers { border: 1px solid var(--line) !important; border-radius: 12px !important; box-shadow: 0 8px 24px rgba(12, 24, 40, 0.12) !important; }
+  .leaflet-control-layers-expanded { padding: 8px 10px 8px 8px !important; max-height: min(70vh, calc(100% - 12px)); overflow-y: auto; }
+  .leaflet-control-layers label { font: 12px/1.45 ui-sans-serif, system-ui, sans-serif; margin: 2px 0; }
+  .leaflet-popup-content { margin: 10px 12px; font: 12.5px/1.45 ui-sans-serif, system-ui, sans-serif; }
+  .leaflet-popup-content b { color: var(--muted); font-weight: 600; }
+  @media (max-width: 980px) {
+    main { flex-direction: column; }
+    #map { flex: none; height: 34vh; }
+    aside { max-width: none; min-width: 0; border-left: 0; border-top: 1px solid var(--line-strong); }
+  }
 </style>
 </head>
 <body>
@@ -31,72 +320,310 @@
 <script>
 const DATA = __DATA__;
 const $ = (id) => document.getElementById(id);
-const map = L.map("map").setView([27.5, 73], 6);
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 12, attribution: "&copy; OpenStreetMap" }).addTo(map);
+const map = L.map("map", { zoomSnap: 0.25 });
+L.tileLayer("https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=__CARTO_KEY__", {
+  maxZoom: 20,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="https://carto.com/attributions">CARTO</a>',
+}).addTo(map);
 
 const ZONE_COLOR = { CAP: "#2a9d8f", AAR_TRACK: "#8338ec", CORRIDOR: "#3a86ff", TRA: "#f77f00", ADIZ: "#d00000", RESTRICTED: "#9d0208", PROHIBITED: "#6a040f", DANGER: "#e85d04", CTR: "#577590", TMA: "#43aa8b" };
+const MISSION_COLOR = { DCA: "#1d4e89", CAP: "#0f766e", STRIKE: "#9f1239", SEAD: "#b45309", CAS: "#9a3412", ISR: "#6d28d9", AAR: "#7c3aed", AIRLIFT: "#0369a1", SAR: "#157f3d" };
 const THREAT_COLOR = { ACTIVE: "#d00000", SUPPRESSED: "#f4a261", DESTROYED: "#888", UNKNOWN: "#9d4edd" };
+const THREAT_SHORT = { SAM_LONG: "SAM-L", SAM_MED: "SAM-M", SAM_SHORT: "SAM-S", RADAR_EW: "EW", RADAR_GCI: "GCI", AAA: "AAA", ENEMY_CAP: "CAP", AIRFIELD: "AF" };
 const flyColor = (f) => `hsl(${Math.round(f * 120)},70%,50%)`;
-const geo = (items, style, popup) => L.geoJSON(items.filter((i) => i.geometry).map((i) => ({ type: "Feature", properties: i, geometry: i.geometry })), {
-  style: (f) => style(f.properties), pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 3, ...style(f.properties) }),
-  onEachFeature: (f, l) => l.bindPopup(popup(f.properties)),
+const labeled = [];
+const stamp = (layer, text, minZoom) => {
+  if (!text) return;
+  layer.bindTooltip(text, { className: "tac", direction: "right", offset: [8, 0], opacity: 1 });
+  labeled.push({ layer, minZoom });
+};
+const refreshLabels = () => {
+  const z = map.getZoom();
+  labeled.forEach(({ layer, minZoom }) => (layer._map && z >= minZoom ? layer.openTooltip() : layer.closeTooltip()));
+};
+const pin = (kind, color) => L.divIcon({ className: `pin ${kind}`, iconSize: [13, 13], iconAnchor: [6, 6], html: `<i${color ? ` style="background:${color}"` : ""}></i>` });
+const plane = (heading) => L.divIcon({
+  className: "ac",
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+  html: `<span style="transform:rotate(${Math.round(heading || 0)}deg)"></span>`,
+});
+const fl = (meters) => (meters == null ? "" : ` FL${String(Math.round(meters * 3.28084 / 100)).padStart(3, "0")}`);
+const geo = (items, style, popup, labelOf, minZoom) => L.geoJSON(items.filter((i) => i.geometry).map((i) => ({ type: "Feature", properties: i, geometry: i.geometry })), {
+  style: (f) => style(f.properties),
+  pointToLayer: (f, ll) => L.circleMarker(ll, { radius: f.properties.kind === "city" ? 4 : 3, ...style(f.properties) }),
+  onEachFeature: (f, l) => {
+    l.bindPopup(popup(f.properties));
+    if (labelOf) stamp(l, labelOf(f.properties), minZoom);
+  },
 });
 const tip = (o, keys) => keys.map((k) => `<b>${k}</b>: ${o[k]}`).join("<br>");
+const threatStatus = Object.fromEntries(DATA.threats.map((t) => [t.threat_id, t.status]));
 
+const byKind = (kind) => DATA.india_layers.filter((i) => i.kind === kind);
 const layers = {
-  "Bases": L.layerGroup(DATA.bases.map((b) => L.marker([b.lat, b.lon]).bindPopup(tip(b, ["base_id", "name", "icao", "runway_length_m", "shelter_count", "fuel_capacity_l"])))),
-  "Borders": geo(DATA.borders, () => ({ color: "#000", weight: 2, dashArray: "6 4" }), (p) => p.name),
-  "GIS features": geo(DATA.features, (p) => ({ color: p.kind === "road" ? "#6c757d" : p.kind === "city" ? "#212529" : "#0077b6", weight: 1 }), (p) => `${p.kind}: ${p.name}`),
-  "Airspace": geo(DATA.zones, (p) => ({ color: ZONE_COLOR[p.type] || "#555", weight: 1, fillOpacity: 0.15 }), (p) => tip(p, ["zone_id", "name", "type", "floor_ft", "ceiling_ft", "active_from", "active_to"])),
-  "Threats": L.layerGroup(DATA.threats.flatMap((t) => [
-    L.circle([t.lat, t.lon], { radius: t.engagement_range_km * 1000, color: THREAT_COLOR[t.status], weight: 1, fillOpacity: 0.06 }),
-    L.circleMarker([t.lat, t.lon], { radius: 5, color: THREAT_COLOR[t.status] }).bindPopup(tip(t, ["threat_id", "type", "status", "engagement_range_km", "confidence"])),
-  ])),
-  "Threat tracks": L.layerGroup(Object.values(DATA.tracks.reduce((a, p) => ((a[p.threat_id] ||= []).push([p.lat, p.lon]), a), {})).map((pts) => L.polyline(pts, { color: "#d00000", weight: 1 }))),
-  "Targets": L.layerGroup(DATA.targets.map((t) => L.circleMarker([t.lat, t.lon], { radius: 6, color: "#000", fillColor: "#ffd60a", fillOpacity: 1 }).bindPopup(tip(t, ["target_id", "target_class", "value", "hardness"])))),
-  "Mission areas": geo(DATA.missions.map((m) => ({ ...m, geometry: m.area })), () => ({ color: "#06d6a0", weight: 1, fillOpacity: 0.1 }), (p) => tip(p, ["mission_id", "type", "priority"])),
+  "Railways": geo(byKind("rail"), () => ({ color: "#4a4a4a", weight: 1.6, dashArray: "5 3" }), () => "Railway"),
+  "Highways": geo(byKind("road"), () => ({ color: "#c2762b", weight: 1.4 }), (p) => `Road: ${p.name}`),
+  "Rivers": geo(byKind("river"), () => ({ color: "#2b8cd6", weight: 1.3 }), (p) => `River: ${p.name}`, (p) => p.name, 6),
+  "State boundaries": geo(byKind("state"), () => ({ color: "#7a8aa0", weight: 1, dashArray: "2 4" }), () => "State boundary"),
+  "Cities": L.layerGroup(byKind("city").map((c) => {
+    const [lon, lat] = c.geometry.coordinates;
+    const m = L.circleMarker([lat, lon], { radius: c.rank <= 2 ? 5 : 3, color: "#fff", weight: 1, fillColor: "#1d4e89", fillOpacity: 0.9 }).bindPopup(`${c.name}<br>pop ${Number(c.pop).toLocaleString()}`);
+    stamp(m, c.name, c.rank <= 1 ? 4 : c.rank <= 3 ? 6 : 8);
+    return m;
+  })),
+  "India": geo([{ name: "India", geometry: DATA.india }], () => ({ color: "#142033", weight: 2.5, fillColor: "#1d4e89", fillOpacity: 0.04 }), () => "India"),
+  "Bases": L.layerGroup(DATA.bases.map((b) => {
+    const marker = L.marker([b.lat, b.lon], { icon: pin("base") }).bindPopup(tip(b, ["base_id", "name", "icao", "elevation_ft", "runway_length_m", "shelter_count", "fuel_capacity_l", "max_sorties_per_hour"]));
+    stamp(marker, b.icao, 5);
+    return marker;
+  })),
+  "Borders": geo(DATA.borders, () => ({ color: "#c1121f", weight: 2.5 }), (p) => p.name, (p) => p.name, 6),
+  "GIS features": geo(DATA.features, (p) => ({ color: p.kind === "road" ? "#8a6a32" : p.kind === "city" ? "#1d4e89" : "#2b6cb0", weight: p.kind === "road" ? 2 : 1.5 }), (p) => `${p.kind}: ${p.name}`, (p) => p.name, 8),
+  "Airspace": geo(DATA.zones, (p) => ({ color: ZONE_COLOR[p.type] || "#555", weight: 1.5, fillOpacity: 0.08 }), (p) => tip(p, ["zone_id", "name", "type", "floor_ft", "ceiling_ft", "active_from", "active_to"]), (p) => p.name, 8),
+  "Threats": L.layerGroup(DATA.threats.flatMap((t) => {
+    const color = THREAT_COLOR[t.status];
+    const marker = L.marker([t.lat, t.lon], { icon: pin("threat", color) }).bindPopup(tip(t, ["threat_id", "type", "status", "engagement_range_km", "detection_range_km", "confidence"]));
+    stamp(marker, `${THREAT_SHORT[t.type] || t.type} ${t.threat_id}`, 6);
+    return [
+      L.circle([t.lat, t.lon], { radius: t.detection_range_km * 1000, color, weight: 1, dashArray: "2 6", fill: false, opacity: 0.35 }),
+      L.circle([t.lat, t.lon], { radius: t.engagement_range_km * 1000, color, weight: 1.5, fillOpacity: 0.06 }),
+      marker,
+    ];
+  })),
+  "Threat tracks": L.layerGroup(Object.entries(DATA.tracks.reduce((a, p) => ((a[p.threat_id] ||= []).push([p.lat, p.lon]), a), {})).map(([id, pts]) => L.polyline(pts, { color: THREAT_COLOR[threatStatus[id]] || "#d00000", weight: 1.5, opacity: 0.85 }))),
+  "Targets": L.layerGroup(DATA.targets.map((t) => {
+    const marker = L.marker([t.lat, t.lon], { icon: pin("target"), zIndexOffset: 400 }).bindPopup(tip(t, ["target_id", "target_class", "value", "hardness"]));
+    stamp(marker, `${t.target_id} ${t.target_class}`, 6);
+    return marker;
+  })),
+  "Mission areas": geo(DATA.missions.map((m) => ({ ...m, geometry: m.area })), (p) => ({ color: MISSION_COLOR[p.type] || "#06d6a0", weight: 1.5, dashArray: "5 4", fillOpacity: 0.05 }), (p) => tip(p, ["mission_id", "type", "priority", "status"]), (p) => `${p.mission_id} ${p.type}`, 8),
   "Weather (flyability)": L.layerGroup(DATA.weather.map(([la, lo, f, cb]) => L.rectangle([[la - 0.25, lo - 0.25], [la + 0.25, lo + 0.25]], { stroke: false, fillColor: flyColor(f), fillOpacity: cb ? 0.7 : 0.3 }))),
-  "ADS-B": L.layerGroup(DATA.adsb.map((a) => L.circleMarker([a.lat, a.lon], { radius: 3, color: "#023e8a" }).bindPopup(tip(a, ["icao24", "callsign", "alt_m", "speed_ms", "heading"])))),
+  "ADS-B": L.layerGroup(DATA.adsb.map((a) => {
+    const marker = a.on_ground
+      ? L.circleMarker([a.lat, a.lon], { radius: 3, color: "#8aa0b8", weight: 1, fillOpacity: 0.8 })
+      : L.marker([a.lat, a.lon], { icon: plane(a.heading), zIndexOffset: 500 });
+    marker.bindPopup(tip(a, ["icao24", "callsign", "alt_m", "speed_ms", "heading", "on_ground"]));
+    if (!a.on_ground) stamp(marker, `${(a.callsign || a.icao24).trim()}${fl(a.alt_m)}`, 7);
+    return marker;
+  })),
 };
-const defaults = ["Bases", "Borders", "Airspace", "Threats", "Targets"];
+const defaults = ["India", "Railways", "Highways", "Rivers", "State boundaries", "Cities", "Bases", "Borders", "GIS features", "Airspace", "Threats", "Threat tracks", "Targets", "Mission areas", "ADS-B"];
 defaults.forEach((n) => layers[n].addTo(map));
 L.control.layers(null, layers, { collapsed: false }).addTo(map);
+L.control.scale({ imperial: false, maxWidth: 140 }).addTo(map);
+const hud = L.control({ position: "bottomleft" });
+hud.onAdd = () => {
+  const el = L.DomUtil.create("div", "map-hud");
+  const paint = (latlng) => { el.textContent = latlng ? `${latlng.lat.toFixed(3)}°  ${latlng.lng.toFixed(3)}°  ·  Z${map.getZoom()}` : `Z${map.getZoom()}`; };
+  map.on("mousemove", (e) => paint(e.latlng));
+  map.on("zoomend", () => paint());
+  paint();
+  return el;
+};
+hud.addTo(map);
+const legend = L.control({ position: "bottomright" });
+legend.onAdd = () => {
+  const el = L.DomUtil.create("div", "legend");
+  el.innerHTML = `<b>PICTURE</b>
+    <div><i style="background:#1d4e89"></i>Base</div>
+    <div><i style="background:#ffd60a"></i>Target</div>
+    <div><i style="background:#d00000;border-radius:99px"></i>Threat</div>
+    <div><i class="ring"></i>Detect / engage</div>
+    <div><i style="background:#0b3a75;clip-path:polygon(50% 0,100% 100%,0 100%)"></i>ADS-B</div>`;
+  return el;
+};
+legend.addTo(map);
+const frame = DATA.india ? L.geoJSON(DATA.india).getBounds() : L.latLngBounds([[6.5, 68], [37.5, 97.5]]);
+map.fitBounds(frame, { padding: [20, 20] });
+map.on("zoomend overlayadd", refreshLabels);
+refreshLabels();
+addEventListener("resize", () => map.invalidateSize());
 
-// Header
-$("head").innerHTML = `<b>GARUDA</b> seed ${DATA.seed} &nbsp; ` + ["missions", "targets", "threats", "bases", "aircraft", "crew", "zones", "adsb_tracks", "weapons", "cells", "observations"].map((k) => `<span>${k}: ${DATA.counts[k]}</span>`).join("");
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const LABELS = {
+  mission_id: "Mission", window_start: "Window", duration_min: "Duration", target_id: "Target",
+  tail_no: "Tail", base_id: "Base", status_reason: "Reason", fuel_kg: "Fuel kg",
+  hours_to_next_inspection: "Hrs to insp.", crew_id: "Crew", primary_type: "Type",
+  medical_status: "Medical", fatigue_score: "Fatigue", duty_hours_24h: "Duty 24h",
+  weapon_code: "Weapon", range_km: "Range km", weight_kg: "Weight kg", weapon_types: "Types",
+  config_id: "Config", aircraft_type: "Aircraft", total_weight_kg: "Weight kg",
+  range_penalty_pct: "Penalty", threat_id: "Threat", engagement_range_km: "Range km",
+  pk_base: "Pk", zone_id: "Zone", floor_ft: "Floor ft", ceiling_ft: "Ceiling ft",
+  capacity_per_hour: "Cap / h", obs_time: "Observed", flight_category: "Category",
+  vis_km: "Vis km", wind_kts: "Wind kt", origin_country: "Country", alt_m: "Alt m",
+  speed_ms: "m/s", on_ground: "Ground", runway_count: "Runways", runway_length_m: "Length m",
+  shelter_count: "Shelters", fuel_capacity_l: "Fuel L", max_sorties_per_hour: "Sorties / h",
+  icao24: "ICAO24", priority: "Pri",
+};
+const COUNT_LABEL = {
+  missions: "Missions", targets: "Targets", threats: "Threats", bases: "Bases",
+  aircraft: "Aircraft", crew: "Crew", zones: "Zones", adsb_tracks: "ADS-B",
+  weapons: "Weapons", cells: "Wx cells", observations: "Obs",
+};
+const TONE = {
+  FMC: "ok", FIT: "ok", VFR: "ok", DONE: "ok", APPROVED: "ok", EXECUTING: "ok", SAR: "ok",
+  ACTIVE: "bad", NMC: "bad", AOG: "bad", GROUNDED: "bad", LIFR: "bad", CANCELLED: "bad",
+  PROHIBITED: "bad", RESTRICTED: "bad", STRIKE: "bad",
+  PMC: "warn", LIMITED: "warn", MVFR: "warn", SUPPRESSED: "warn", IFR: "warn", DANGER: "warn",
+  REQUESTED: "warn", SEAD: "warn", CAS: "warn",
+  PLANNED: "info", IN_MISSION: "info", CAP: "info", DCA: "info", ISR: "info", AAR: "info", ADIZ: "info",
+  UNKNOWN: "muted", DESTROYED: "muted", synthetic: "muted",
+  openaip: "info", metar: "info",
+};
+const BADGE = new Set(["status", "medical_status", "flight_category", "type", "role", "category", "guidance", "source", "primary_type"]);
+const METER = new Set(["flyability", "fatigue_score", "confidence", "pk_base"]);
+const WRAP = new Set(["name", "status_reason"]);
+const PALETTE = ["#1d4e89", "#0f766e", "#b45309", "#9f1239", "#6d28d9", "#0369a1", "#3f6212", "#9a3412"];
 
-// Tables
-const bars = (counter) => Object.entries(counter).map(([k, v]) => `<div>${k.padEnd(12, "\u00a0")} <span class="bar" style="width:${v * 3}px"></span> ${v}</div>`).join("");
-function table(rows, cols) {
-  let sortKey = null, asc = true;
-  const wrap = document.createElement("div");
-  const draw = () => {
-    const data = [...rows];
-    if (sortKey) data.sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : -1) * (asc ? 1 : -1));
-    wrap.innerHTML = `<table><thead><tr>${cols.map((c) => `<th data-k="${c}">${c}</th>`).join("")}</tr></thead><tbody>${data.map((r) => `<tr>${cols.map((c) => `<td>${r[c] ?? ""}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
-    wrap.querySelectorAll("th").forEach((th) => (th.onclick = () => { asc = sortKey === th.dataset.k ? !asc : true; sortKey = th.dataset.k; draw(); }));
-  };
-  draw();
-  return wrap;
+function label(key) {
+  return LABELS[key] || key.replace(/_/g, " ");
 }
+function formatNumber(n) {
+  if (Number.isInteger(n)) return n.toLocaleString("en-US");
+  const digits = Math.abs(n) >= 100 ? 1 : 2;
+  return n.toLocaleString("en-US", { maximumFractionDigits: digits });
+}
+function formatTime(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}z`;
+}
+function meterColor(key, n) {
+  const hot = key === "fatigue_score" || key === "pk_base";
+  const bad = hot ? n >= 0.66 : n < 0.34;
+  const good = hot ? n < 0.34 : n >= 0.66;
+  if (bad) return "#c0352b";
+  if (good) return "#157f3d";
+  return "#d4a017";
+}
+function cellHtml(key, value) {
+  if (value === null || value === undefined || value === "") return '<span class="dash">—</span>';
+  if (typeof value === "boolean") return value ? '<span class="badge ok">Yes</span>' : '<span class="badge muted">No</span>';
+  if (key === "priority") return `<span class="pri p${esc(value)}">${esc(value)}</span>`;
+  if (METER.has(key) && typeof value === "number") {
+    const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
+    return `<span class="meter" title="${pct}%"><span style="width:${pct}%;background:${meterColor(key, value)}"></span></span><span class="num">${value.toFixed(2)}</span>`;
+  }
+  if (BADGE.has(key) && typeof value === "string") {
+    const tone = TONE[value] || "neutral";
+    return `<span class="badge ${tone}">${esc(value.replace(/_/g, " "))}</span>`;
+  }
+  if (typeof value === "number") {
+    const text = key.endsWith("_pct") ? `${formatNumber(value)}%` : key === "duration_min" ? `${formatNumber(value)} min` : formatNumber(value);
+    return `<span class="num">${text}</span>`;
+  }
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) return `<span class="time">${esc(formatTime(value))}</span>`;
+  return esc(value);
+}
+function compare(a, b, key) {
+  const av = a[key], bv = b[key];
+  const aEmpty = av === null || av === undefined || av === "";
+  const bEmpty = bv === null || bv === undefined || bv === "";
+  if (aEmpty || bEmpty) return Number(aEmpty) - Number(bEmpty);
+  if (typeof av === "number" && typeof bv === "number") return av - bv;
+  if (typeof av === "boolean" && typeof bv === "boolean") return Number(av) - Number(bv);
+  return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: "base" });
+}
+
+const COUNT_KEYS = ["missions", "targets", "threats", "bases", "aircraft", "crew", "zones", "adsb_tracks", "weapons", "cells", "observations"];
+$("head").innerHTML = `<div class="brand"><span class="mark">G</span><div><strong>GARUDA</strong><em>Data layer</em></div></div><span class="seed">Seed ${esc(DATA.seed)}</span><div class="metrics">${COUNT_KEYS.map((k) => `<span class="metric">${esc(COUNT_LABEL[k] || k)} <b>${Number(DATA.counts[k] || 0).toLocaleString("en-US")}</b></span>`).join("")}</div>`;
+
+function bars(title, counter) {
+  const entries = Object.entries(counter).sort((a, b) => b[1] - a[1]);
+  const max = Math.max(...entries.map(([, v]) => v), 1);
+  const el = document.createElement("section");
+  el.className = "summary";
+  el.innerHTML = `<h2>${esc(title)}</h2><div class="bars">${entries.map(([k, v], i) => `<div class="bar-row"><span class="bar-label" title="${esc(k)}">${esc(k.replace(/_/g, " "))}</span><span class="bar-track"><span class="bar-fill" style="width:${(v / max) * 100}%;background:${PALETTE[i % PALETTE.length]}"></span></span><span class="bar-value">${Number(v).toLocaleString("en-US")}</span></div>`).join("")}</div>`;
+  return el;
+}
+function note(text) {
+  const el = document.createElement("p");
+  el.className = "note";
+  el.textContent = text;
+  return el;
+}
+function table(rows, cols, title) {
+  let sortKey = null, asc = true, query = "";
+  const numeric = new Set(cols.filter((c) => rows.some((r) => typeof r[c] === "number")));
+  const centered = new Set(cols.filter((c) => c === "priority" || rows.some((r) => typeof r[c] === "boolean")));
+  const card = document.createElement("section");
+  card.className = "table-card";
+  const toolbar = document.createElement("div");
+  toolbar.className = "toolbar";
+  const heading = document.createElement("h2");
+  heading.textContent = title;
+  const input = document.createElement("input");
+  input.type = "search";
+  input.placeholder = "Filter rows";
+  input.setAttribute("aria-label", `Filter ${title}`);
+  const count = document.createElement("span");
+  count.className = "count";
+  toolbar.append(heading, input, count);
+  const scroll = document.createElement("div");
+  scroll.className = "table-scroll";
+  card.append(toolbar, scroll);
+  const draw = () => {
+    const q = query.trim().toLowerCase();
+    const matched = q ? rows.filter((r) => cols.some((c) => String(r[c] ?? "").toLowerCase().includes(q))) : rows;
+    const data = matched.slice();
+    if (sortKey) data.sort((a, b) => { const c = compare(a, b, sortKey); return c === 0 || a[sortKey] == null || a[sortKey] === "" || b[sortKey] == null || b[sortKey] === "" ? c : c * (asc ? 1 : -1); });
+    count.textContent = q ? `${data.length} / ${rows.length}` : `${rows.length.toLocaleString("en-US")} rows`;
+    const head = cols.map((c) => {
+      const cls = [numeric.has(c) ? "num" : "", centered.has(c) ? "mid" : "", sortKey === c ? "sorted" : ""].filter(Boolean).join(" ");
+      const caret = sortKey === c ? `<span class="caret">${asc ? "▲" : "▼"}</span>` : "";
+      return `<th class="${cls}" data-k="${esc(c)}">${esc(label(c))}${caret}</th>`;
+    }).join("");
+    const body = data.length
+      ? data.map((r) => `<tr>${cols.map((c, i) => {
+          const cls = [i === 0 ? "id" : "", numeric.has(c) ? "num" : "", centered.has(c) ? "mid" : "", WRAP.has(c) ? "wrap" : ""].filter(Boolean).join(" ");
+          return `<td class="${cls}">${cellHtml(c, r[c])}</td>`;
+        }).join("")}</tr>`).join("")
+      : `<tr class="empty-row"><td colspan="${cols.length}">No rows match</td></tr>`;
+    scroll.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+    scroll.querySelectorAll("th").forEach((th) => {
+      th.onclick = () => {
+        asc = sortKey === th.dataset.k ? !asc : true;
+        sortKey = th.dataset.k;
+        draw();
+      };
+    });
+  };
+  input.addEventListener("input", () => { query = input.value; draw(); });
+  draw();
+  return card;
+}
+
 const stockByBase = Object.values(DATA.stocks.reduce((a, s) => ((a[s.base_id] ||= { base_id: s.base_id, weapon_types: 0, rounds: 0 }), a[s.base_id].weapon_types++, (a[s.base_id].rounds += s.quantity), a), {}));
 const TABS = {
-  Missions: () => [bars(DATA.summary.mission_types), table(DATA.missions, ["mission_id", "type", "priority", "window_start", "duration_min", "target_id", "status"])],
-  Aircraft: () => [bars(DATA.summary.aircraft_status), table(DATA.aircraft, ["tail_no", "type", "base_id", "status", "status_reason", "fuel_kg", "hours_to_next_inspection"])],
-  Crew: () => [bars(DATA.summary.crew_medical), table(DATA.crew, ["crew_id", "callsign", "role", "base_id", "primary_type", "medical_status", "fatigue_score", "duty_hours_24h"])],
-  Weapons: () => [table(DATA.weapons, ["weapon_code", "category", "range_km", "weight_kg", "guidance"]), table(stockByBase, ["base_id", "weapon_types", "rounds"])],
-  Loads: () => [table(DATA.load_configs, ["config_id", "aircraft_type", "role", "total_weight_kg", "range_penalty_pct"])],
-  Threats: () => [table(DATA.threats, ["threat_id", "type", "status", "mobile", "engagement_range_km", "pk_base", "confidence"])],
-  Airspace: () => [table(DATA.zones, ["zone_id", "name", "type", "floor_ft", "ceiling_ft", "source", "capacity_per_hour"])],
-  Weather: () => [`<p>Grid shown for ${DATA.weather_time}. Base observations:</p>`, table(DATA.observations, ["icao", "obs_time", "flight_category", "ceiling_ft", "vis_km", "wind_kts", "flyability"])],
-  "ADS-B": () => [table(DATA.adsb, ["icao24", "callsign", "origin_country", "alt_m", "speed_ms", "heading", "on_ground"])],
-  Bases: () => [table(DATA.bases, ["base_id", "name", "icao", "runway_count", "runway_length_m", "shelter_count", "fuel_capacity_l", "max_sorties_per_hour"])],
+  Missions: () => [bars("Mission types", DATA.summary.mission_types), table(DATA.missions, ["mission_id", "type", "priority", "window_start", "duration_min", "target_id", "status"], "Missions")],
+  Aircraft: () => [bars("Aircraft status", DATA.summary.aircraft_status), table(DATA.aircraft, ["tail_no", "type", "base_id", "status", "status_reason", "fuel_kg", "hours_to_next_inspection"], "Aircraft")],
+  Crew: () => [bars("Medical status", DATA.summary.crew_medical), table(DATA.crew, ["crew_id", "callsign", "role", "base_id", "primary_type", "medical_status", "fatigue_score", "duty_hours_24h"], "Crew")],
+  Weapons: () => [table(DATA.weapons, ["weapon_code", "category", "range_km", "weight_kg", "guidance"], "Weapon types"), table(stockByBase, ["base_id", "weapon_types", "rounds"], "Stock by base")],
+  Loads: () => [table(DATA.load_configs, ["config_id", "aircraft_type", "role", "total_weight_kg", "range_penalty_pct"], "Loadouts")],
+  Threats: () => [table(DATA.threats, ["threat_id", "type", "status", "mobile", "engagement_range_km", "pk_base", "confidence"], "Threats")],
+  Airspace: () => [table(DATA.zones, ["zone_id", "name", "type", "floor_ft", "ceiling_ft", "source", "capacity_per_hour"], "Zones")],
+  Weather: () => [note(`Station observations for ${formatTime(DATA.weather_time)}. On the map, color is flyability and a stronger fill marks thunderstorms.`), table(DATA.observations, ["icao", "obs_time", "flight_category", "ceiling_ft", "vis_km", "wind_kts", "flyability"], "Observations")],
+  "ADS-B": () => [table(DATA.adsb, ["icao24", "callsign", "origin_country", "alt_m", "speed_ms", "heading", "on_ground"], "Tracks")],
+  Bases: () => [table(DATA.bases, ["base_id", "name", "icao", "runway_count", "runway_length_m", "shelter_count", "fuel_capacity_l", "max_sorties_per_hour"], "Bases")],
 };
 function show(name) {
-  [...$("tabs").children].forEach((b) => b.classList.toggle("on", b.textContent === name));
-  $("panel").replaceChildren(...TABS[name]().map((x) => (typeof x === "string" ? Object.assign(document.createElement("div"), { innerHTML: x }) : x)));
+  [...$("tabs").children].forEach((b) => {
+    const on = b.textContent === name;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+  $("panel").replaceChildren(...TABS[name]());
 }
-Object.keys(TABS).forEach((name) => $("tabs").append(Object.assign(document.createElement("button"), { textContent: name, onclick: () => show(name) })));
+Object.keys(TABS).forEach((name) => {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = name;
+  button.onclick = () => show(name);
+  $("tabs").append(button);
+});
 show("Missions");
 </script>
 </body>

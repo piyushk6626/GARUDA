@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from collections import Counter
 from pathlib import Path
 
@@ -14,6 +15,11 @@ from garuda.schemas.mission import GeneratedScenario
 from garuda.storage.seed import scenario_counts
 
 TEMPLATE = Path(__file__).with_name("viz_template.html")
+REPO_ROOT = Path(__file__).resolve().parents[3]
+GIS_DIR = REPO_ROOT / "backend" / "fixtures" / "gis"
+INDIA_OUTLINE = GIS_DIR / "india_outline.geojson"
+INDIA_LAYERS = GIS_DIR / "india_layers.geojson"
+INDIA_BORDER = GIS_DIR / "india_border.geojson"
 
 
 def _geo(text: str | None) -> dict | None:
@@ -22,6 +28,38 @@ def _geo(text: str | None) -> dict | None:
 
 def _rows(items: list, *fields: str) -> list[dict]:
     return [{name: getattr(item, name) for name in fields} for item in items]
+
+
+def india_outline() -> dict | None:
+    if not INDIA_OUTLINE.is_file():
+        return None
+    payload = json.loads(INDIA_OUTLINE.read_text())
+    features = payload.get("features") or []
+    if not features:
+        return None
+    geometry = features[0].get("geometry")
+    return geometry if isinstance(geometry, dict) else None
+
+
+def _fixture_features(path: Path) -> list[dict]:
+    if not path.is_file():
+        return []
+    return json.loads(path.read_text()).get("features") or []
+
+
+def india_layers() -> list[dict]:
+    """Nationwide rail, road, river, state-boundary and city features."""
+    return [
+        {**f["properties"], "geometry": f["geometry"]} for f in _fixture_features(INDIA_LAYERS)
+    ]
+
+
+def india_borders() -> list[dict]:
+    """Full India-Pakistan boundary (IB + LoC), not clipped to the scenario bbox."""
+    return [
+        {"name": f["properties"]["name"], "geometry": f["geometry"]}
+        for f in _fixture_features(INDIA_BORDER)
+    ]
 
 
 def scenario_payload(scenario: GeneratedScenario) -> dict:
@@ -36,7 +74,10 @@ def scenario_payload(scenario: GeneratedScenario) -> dict:
         "seed": scenario.seed,
         "counts": scenario_counts(scenario),
         "bases": [b.model_dump() for b in scenario.bases],
-        "borders": [{"name": b.name, "geometry": _geo(b.wkt)} for b in scenario.borders],
+        "borders": india_borders()
+        or [{"name": b.name, "geometry": _geo(b.wkt)} for b in scenario.borders],
+        "india_layers": india_layers(),
+        "india": india_outline(),
         "features": [
             {"kind": f.kind, "name": f.name, "geometry": _geo(f.wkt)} for f in scenario.features
         ],
@@ -77,9 +118,30 @@ def scenario_payload(scenario: GeneratedScenario) -> dict:
     return payload
 
 
+def carto_api_key() -> str:
+    key = os.environ.get("CARTO_API_KEY", "").strip()
+    if key:
+        return key
+    env_path = REPO_ROOT / ".env"
+    if not env_path.is_file():
+        return ""
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        if name.strip() == "CARTO_API_KEY":
+            return value.strip().strip('"').strip("'")
+    return ""
+
+
 def render_html(scenario: GeneratedScenario) -> str:
     data = json.dumps(scenario_payload(scenario), default=str).replace("</", "<\\/")
-    return TEMPLATE.read_text().replace("__DATA__", data)
+    return (
+        TEMPLATE.read_text()
+        .replace("__DATA__", data)
+        .replace("__CARTO_KEY__", carto_api_key())
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
