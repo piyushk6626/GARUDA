@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -14,10 +15,19 @@ from garuda.harness.retrieval.session import RetrievalSession
 from garuda.harness.retrieval.state import RetrievalState
 from garuda.harness.retrieval.tools import ASK_NAME, CONTROL_TOOL_NAMES, FINISH_NAME, model_tools, run_data_call
 
+RunCall = Callable[[str, dict[str, Any], ToolContext], Awaitable[ToolCallRecord]]
 
-def build_retrieval_graph(ctx: ToolContext, model: Any):
+
+def build_retrieval_graph(
+    ctx: ToolContext,
+    model: Any,
+    *,
+    tools: list[Any] | None = None,
+    run_call: RunCall = run_data_call,
+):
     """Compile a graph closed over ``ctx``. ToolContext is not checkpoint state."""
-    tools = model_tools()
+    if tools is None:
+        tools = model_tools()
 
     async def select(state: RetrievalState) -> dict[str, Any]:
         response = await model.bind_tools(tools).ainvoke(state["messages"])
@@ -34,7 +44,7 @@ def build_retrieval_graph(ctx: ToolContext, model: Any):
         budget = state["tool_budget"]
         allowed = data_calls[:budget]
         skipped = data_calls[budget:]
-        ran = await asyncio.gather(*[_execute_one(call, ctx) for call in allowed])
+        ran = await asyncio.gather(*[run_call(call["name"], call["args"], ctx) for call in allowed])
         records = [
             *ran,
             *(
@@ -85,6 +95,30 @@ async def retrieve(
     leaves it open so the parent or a human can answer. Finish, plain completion,
     and a spent budget close it and drop the messages.
     """
+    return await run_agent(
+        query,
+        ctx,
+        tools=model_tools(),
+        run_call=run_data_call,
+        system_prompt=retrieval_system_prompt(ctx.scenario_time),
+        tool_budget=tool_budget,
+        model=model,
+        session=session,
+    )
+
+
+async def run_agent(
+    query: str,
+    ctx: ToolContext,
+    *,
+    tools: list[Any],
+    run_call: RunCall,
+    system_prompt: str,
+    tool_budget: int,
+    model: Any | None,
+    session: RetrievalSession | None,
+) -> RetrievalResult:
+    """Select-execute loop shared by sub-agents that differ only in tools and prompt."""
     if tool_budget < 0:
         raise ValueError("tool_budget must be >= 0")
     if model is None:
@@ -93,10 +127,10 @@ async def retrieve(
         model = chat_model()
     if session is None:
         session = RetrievalSession()
-    graph = build_retrieval_graph(ctx, model)
+    graph = build_retrieval_graph(ctx, model, tools=tools, run_call=run_call)
     state = await graph.ainvoke(
         {
-            "messages": _turn_messages(session, query, ctx),
+            "messages": _turn_messages(session, query, system_prompt),
             "calls": [],
             "tool_budget": tool_budget,
             "finished": False,
@@ -115,10 +149,6 @@ async def retrieve(
         question=question,
         session=session if question else None,
     )
-
-
-async def _execute_one(call: dict[str, Any], ctx: ToolContext) -> ToolCallRecord:
-    return await run_data_call(call["name"], call["args"], ctx)
 
 
 def _route_after_select(state: RetrievalState) -> str:
@@ -163,14 +193,14 @@ def _asked_question(calls: list[dict[str, Any]]) -> str:
     return "Need more context before the data tools can run."
 
 
-def _turn_messages(session: RetrievalSession, query: str, ctx: ToolContext) -> list[Any]:
+def _turn_messages(session: RetrievalSession, query: str, system_prompt: str) -> list[Any]:
     prior = session.take_prior()
     pending_id = _pending_ask_id(prior)
     if pending_id:
         return [*prior, ToolMessage(content=query, tool_call_id=pending_id, name=ASK_NAME)]
     messages: list[Any] = []
     if not any(isinstance(message, SystemMessage) for message in prior):
-        messages.append(SystemMessage(content=retrieval_system_prompt(ctx.scenario_time)))
+        messages.append(SystemMessage(content=system_prompt))
     messages.extend(prior)
     messages.append(HumanMessage(content=query))
     return messages
