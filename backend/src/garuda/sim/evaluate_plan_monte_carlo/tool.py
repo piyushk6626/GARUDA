@@ -1,10 +1,14 @@
+import asyncio
+
 from garuda.contracts.results import Distribution, Sensitivity
 from garuda.contracts.tool import ToolContext, ToolSpec
+from garuda.sim.evaluate_plan_monte_carlo.explain import explain
+from garuda.sim.evaluate_plan_monte_carlo.model import solve
+from garuda.sim.evaluate_plan_monte_carlo.problem import Problem, build_problem
 from garuda.sim.evaluate_plan_monte_carlo.schemas import (
     EvaluatePlanMonteCarloInput,
     EvaluatePlanMonteCarloOutput,
 )
-from garuda.tools.stubs import fixed
 
 SPEC = ToolSpec(
     name="evaluate_plan_monte_carlo",
@@ -29,9 +33,18 @@ STUB_OUTPUT = EvaluatePlanMonteCarloOutput(
 async def evaluate_plan_monte_carlo(
     payload: EvaluatePlanMonteCarloInput, ctx: ToolContext
 ) -> EvaluatePlanMonteCarloOutput:
-    """Skeleton: same output for every input until the simulator is wired."""
-    _ = payload, ctx
-    return fixed(STUB_OUTPUT)
+    """Evaluate a stored plan without writes or changes to shared contracts.
+
+    The threshold is plan.kpis.value; the local RNG uses payload.seed.
+    CPU work is offloaded while the shared run_cpu remains a stub.
+    STUB_OUTPUT remains for compatibility with the phase-2 graph skeleton.
+    """
+    problem = build_problem(payload, ctx)
+    return await asyncio.to_thread(_evaluate, problem)
+
+
+def _evaluate(problem: Problem) -> EvaluatePlanMonteCarloOutput:
+    return explain(problem, solve(problem))
 
 
 # TODO(phase1): from garuda.tools.registry import register; register(SPEC, evaluate_plan_monte_carlo)
