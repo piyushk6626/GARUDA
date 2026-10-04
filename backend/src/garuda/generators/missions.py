@@ -16,6 +16,7 @@ from garuda.config import ScenarioConfig
 from garuda.generators.targets import build_targets
 from garuda.generators.threats import build_threats, suppress_sead_site
 from garuda.generators.weapons import build_weapons
+from garuda.generators.weather import build_weather
 from garuda.schemas.mission import GeneratedScenario, Mission, MissionEffect, MissionType, Target
 
 PRIORITY_WEIGHTS: dict[int, float] = {1: 0.10, 2: 0.20, 3: 0.35, 4: 0.25, 5: 0.10}
@@ -85,6 +86,7 @@ def build_scenario(config: ScenarioConfig, seed: int) -> GeneratedScenario:
     targets = build_targets(config, rng, clusters)
     missions = _build_missions(config, seed, rng, targets)
     suppress_sead_site(threats, missions, targets)
+    cells, observations = build_weather(config, rng)
     return GeneratedScenario(
         seed=seed,
         targets=targets,
@@ -95,6 +97,8 @@ def build_scenario(config: ScenarioConfig, seed: int) -> GeneratedScenario:
         stocks=stocks,
         load_configs=load_configs,
         compatibilities=compatibilities,
+        cells=cells,
+        observations=observations,
     )
 
 

@@ -4,16 +4,20 @@ from datetime import datetime, timezone
 
 from aiokafka import AIOKafkaProducer
 
+from garuda.generators.weather import representative_observations
 from garuda.schemas.mission import Mission
 from garuda.schemas.threat import Threat
 from garuda.schemas.weapon import WeaponStock
+from garuda.schemas.weather import WeatherCell, WeatherStationObs
 
 TOPIC = "garuda.mission.request"
 THREAT_TOPIC = "garuda.threat.update"
 STOCK_TOPIC = "garuda.weapons.stock"
+WEATHER_TOPIC = "garuda.weather.update"
 NAMESPACE = uuid.UUID("6f0b1c3a-7e2d-4a1f-9c55-0b8e4d2a11a0")
 THREAT_NAMESPACE = uuid.UUID("c4e1a8b2-6d3f-4a90-8c17-5b0e2f9a6d34")
 STOCK_NAMESPACE = uuid.UUID("9a2e6c41-1b70-4d88-a5f3-7c14e0b28d56")
+WEATHER_NAMESPACE = uuid.UUID("d17a4e90-5c2b-4f68-9a31-0e6b8c4d2f15")
 
 
 async def publish_missions(bootstrap: str, missions: list[Mission]) -> int:
@@ -104,3 +108,77 @@ def stock_event(stock: WeaponStock, now: datetime | None = None) -> dict:
         "version": 1,
         "payload": stock.model_dump(mode="json"),
     }
+
+
+def weather_events(
+    cells: list[WeatherCell],
+    observations: list[WeatherStationObs],
+    now: datetime | None = None,
+) -> list[dict]:
+    moment = now or datetime.now(timezone.utc)
+    stamp = moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+    events: list[dict] = []
+    grouped: dict[str, list[WeatherCell]] = {}
+    for cell in cells:
+        grouped.setdefault(cell.source, []).append(cell)
+    for source in sorted(grouped):
+        group = grouped[source]
+        issued = min(_as_utc(cell.issued_at) for cell in group)
+        valid = [_as_utc(cell.time) for cell in group]
+        entity_id = issued.strftime("%Y-%m-%dT%H:%M:%SZ")
+        events.append(
+            {
+                "event_id": str(uuid.uuid5(WEATHER_NAMESPACE, f"{WEATHER_TOPIC}:grid:{source}:{entity_id}")),
+                "type": "weather.grid.issued",
+                "entity_id": entity_id,
+                "ts": stamp,
+                "version": 1,
+                "payload": {
+                    "source": source,
+                    "issued_at": entity_id,
+                    "valid_start": min(valid).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "valid_end": max(valid).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "cell_count": len(group),
+                },
+            }
+        )
+    for obs in representative_observations(observations):
+        events.append(
+            {
+                "event_id": str(
+                    uuid.uuid5(WEATHER_NAMESPACE, f"{WEATHER_TOPIC}:base:{obs.source}:{obs.icao}")
+                ),
+                "type": "weather.base.updated",
+                "entity_id": obs.icao,
+                "ts": stamp,
+                "version": 1,
+                "payload": obs.model_dump(mode="json"),
+            }
+        )
+    return events
+
+
+async def publish_weather(
+    bootstrap: str,
+    cells: list[WeatherCell],
+    observations: list[WeatherStationObs],
+) -> int:
+    events = weather_events(cells, observations)
+    producer = AIOKafkaProducer(bootstrap_servers=bootstrap, acks="all")
+    await producer.start()
+    try:
+        for event in events:
+            await producer.send_and_wait(
+                WEATHER_TOPIC,
+                key=str(event["entity_id"]).encode(),
+                value=json.dumps(event).encode(),
+            )
+        return len(events)
+    finally:
+        await producer.stop()
+
+
+def _as_utc(moment: datetime) -> datetime:
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc)

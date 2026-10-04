@@ -5,6 +5,7 @@ import asyncpg
 from garuda.schemas.mission import Mission, Target
 from garuda.schemas.threat import Threat, ThreatTrack
 from garuda.schemas.weapon import Compatibility, LoadConfig, WeaponStock, WeaponType
+from garuda.schemas.weather import WeatherCell, WeatherStationObs
 
 
 def asyncpg_dsn(url: str) -> str:
@@ -23,6 +24,8 @@ async def seed_postgres(
     stocks: list[WeaponStock],
     load_configs: list[LoadConfig],
     compatibilities: list[Compatibility],
+    cells: list[WeatherCell],
+    observations: list[WeatherStationObs],
 ) -> None:
     connection = await asyncpg.connect(asyncpg_dsn(dsn))
     try:
@@ -33,6 +36,8 @@ async def seed_postgres(
                          weapon_stock, weapon_compatibility, load_config, weapon_type
                 """
             )
+            await connection.execute("DELETE FROM weather_station_obs WHERE source = 'synthetic'")
+            await connection.execute("DELETE FROM weather_grid WHERE source = 'synthetic'")
             await _insert_targets(connection, targets)
             await _insert_missions(connection, missions)
             await _insert_threats(connection, threats)
@@ -41,6 +46,20 @@ async def seed_postgres(
             await _insert_stocks(connection, stocks)
             await _insert_load_configs(connection, load_configs)
             await _insert_compatibilities(connection, compatibilities)
+            await _upsert_weather(connection, cells, observations)
+    finally:
+        await connection.close()
+
+
+async def upsert_weather(
+    dsn: str,
+    cells: list[WeatherCell],
+    observations: list[WeatherStationObs],
+) -> None:
+    connection = await asyncpg.connect(asyncpg_dsn(dsn))
+    try:
+        async with connection.transaction():
+            await _upsert_weather(connection, cells, observations)
     finally:
         await connection.close()
 
@@ -224,6 +243,106 @@ async def _insert_load_configs(connection: asyncpg.Connection, load_configs: lis
             for config in load_configs
         ],
     )
+
+
+async def _upsert_weather(
+    connection: asyncpg.Connection,
+    cells: list[WeatherCell],
+    observations: list[WeatherStationObs],
+) -> None:
+    if cells:
+        await connection.executemany(
+            """
+            INSERT INTO weather_grid (
+                time, lat, lon, position,
+                cloud_low_pct, cloud_mid_pct, cloud_high_pct, ceiling_ft,
+                visibility_km, wind_kts, wind_dir_deg, gust_kts,
+                precip_mm_h, cape_jkg, temp_c, freezing_level_ft,
+                source, issued_at, flyability, cb_flag
+            )
+            VALUES (
+                $1, $2, $3, ST_SetSRID(ST_MakePoint($3, $2), 4326),
+                $4, $5, $6, $7,
+                $8, $9, $10, $11,
+                $12, $13, $14, $15,
+                $16, $17, $18, $19
+            )
+            ON CONFLICT (time, lat, lon, source) DO UPDATE SET
+                position = EXCLUDED.position,
+                cloud_low_pct = EXCLUDED.cloud_low_pct,
+                cloud_mid_pct = EXCLUDED.cloud_mid_pct,
+                cloud_high_pct = EXCLUDED.cloud_high_pct,
+                ceiling_ft = EXCLUDED.ceiling_ft,
+                visibility_km = EXCLUDED.visibility_km,
+                wind_kts = EXCLUDED.wind_kts,
+                wind_dir_deg = EXCLUDED.wind_dir_deg,
+                gust_kts = EXCLUDED.gust_kts,
+                precip_mm_h = EXCLUDED.precip_mm_h,
+                cape_jkg = EXCLUDED.cape_jkg,
+                temp_c = EXCLUDED.temp_c,
+                freezing_level_ft = EXCLUDED.freezing_level_ft,
+                issued_at = EXCLUDED.issued_at,
+                flyability = EXCLUDED.flyability,
+                cb_flag = EXCLUDED.cb_flag
+            """,
+            [
+                (
+                    cell.time,
+                    cell.lat,
+                    cell.lon,
+                    cell.cloud_low_pct,
+                    cell.cloud_mid_pct,
+                    cell.cloud_high_pct,
+                    cell.ceiling_ft,
+                    cell.visibility_km,
+                    cell.wind_kts,
+                    cell.wind_dir_deg,
+                    cell.gust_kts,
+                    cell.precip_mm_h,
+                    cell.cape_jkg,
+                    cell.temp_c,
+                    cell.freezing_level_ft,
+                    cell.source,
+                    cell.issued_at,
+                    cell.flyability,
+                    cell.cb_flag,
+                )
+                for cell in cells
+            ],
+        )
+    if observations:
+        await connection.executemany(
+            """
+            INSERT INTO weather_station_obs (
+                obs_time, icao, source, raw_text, flight_category,
+                ceiling_ft, vis_km, wind_kts, crosswind_kts, flyability
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT (obs_time, icao, source) DO UPDATE SET
+                raw_text = EXCLUDED.raw_text,
+                flight_category = EXCLUDED.flight_category,
+                ceiling_ft = EXCLUDED.ceiling_ft,
+                vis_km = EXCLUDED.vis_km,
+                wind_kts = EXCLUDED.wind_kts,
+                crosswind_kts = EXCLUDED.crosswind_kts,
+                flyability = EXCLUDED.flyability
+            """,
+            [
+                (
+                    obs.obs_time,
+                    obs.icao,
+                    obs.source,
+                    obs.raw_text,
+                    obs.flight_category,
+                    obs.ceiling_ft,
+                    obs.vis_km,
+                    obs.wind_kts,
+                    obs.crosswind_kts,
+                    obs.flyability,
+                )
+                for obs in observations
+            ],
+        )
 
 
 async def _insert_compatibilities(

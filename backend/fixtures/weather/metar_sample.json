@@ -1,0 +1,13 @@
+[
+  {
+    "icaoId": "VIJO",
+    "reportTime": "2026-10-04T06:30:00.000Z",
+    "wdir": 50,
+    "wspd": 8,
+    "visib": "6+",
+    "fltCat": "VFR",
+    "temp": 28,
+    "rawOb": "METAR VIJO 040630Z 05008KT 9999 FEW030 28/12 Q1010",
+    "clouds": [{"cover": "FEW", "base": 3000}]
+  }
+]

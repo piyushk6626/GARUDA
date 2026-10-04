@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 
 from garuda.schemas.mission import GeneratedScenario
-from garuda.storage.kafka_publish import publish_missions, publish_stocks, publish_threats
+from garuda.storage.kafka_publish import publish_missions, publish_stocks, publish_threats, publish_weather
 from garuda.storage.neo4j_sync import sync_neo4j
 from garuda.storage.postgres import seed_postgres
 from garuda.storage.redis_seed import seed_redis
@@ -22,6 +22,8 @@ class SeedResult:
     load_configs: int
     compatibilities: int
     stock_keys: int
+    cells: int
+    observations: int
 
 
 def postgres_dsn() -> str:
@@ -55,6 +57,8 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         scenario.stocks,
         scenario.load_configs,
         scenario.compatibilities,
+        scenario.cells,
+        scenario.observations,
     )
     uri, user, password = neo4j_settings()
     await sync_neo4j(
@@ -66,16 +70,20 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         scenario.threats,
         scenario.weapons,
         scenario.stocks,
+        scenario.cells,
     )
     pending, active, stock_keys = await seed_redis(
         redis_url(),
         scenario.missions,
         scenario.threats,
         scenario.stocks,
+        scenario.cells,
+        scenario.observations,
     )
     events = await publish_missions(kafka_bootstrap(), scenario.missions)
     events += await publish_threats(kafka_bootstrap(), scenario.threats)
     events += await publish_stocks(kafka_bootstrap(), scenario.stocks)
+    events += await publish_weather(kafka_bootstrap(), scenario.cells, scenario.observations)
     return SeedResult(
         targets=len(scenario.targets),
         missions=len(scenario.missions),
@@ -89,4 +97,6 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         load_configs=len(scenario.load_configs),
         compatibilities=len(scenario.compatibilities),
         stock_keys=stock_keys,
+        cells=len(scenario.cells),
+        observations=len(scenario.observations),
     )

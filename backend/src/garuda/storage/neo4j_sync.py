@@ -1,8 +1,11 @@
 from neo4j import AsyncGraphDatabase
 
+from garuda.bases import BASES
+from garuda.generators.weather import cells_for_bases
 from garuda.schemas.mission import Mission, Target
 from garuda.schemas.threat import Threat
 from garuda.schemas.weapon import WeaponStock, WeaponType
+from garuda.schemas.weather import WeatherCell
 
 _CLEAR = """
 MATCH (n)
@@ -79,6 +82,35 @@ MERGE (s)-[:STORED_AT]->(b)
 MERGE (s)-[:OF_TYPE]->(w)
 """
 
+_CLEAR_WEATHER = "MATCH (w:WeatherCell) DETACH DELETE w"
+
+_BASES = """
+UNWIND $rows AS row
+MERGE (b:Base {base_id: row.base_id})
+SET b.name = row.name,
+    b.icao = row.icao,
+    b.lat = row.lat,
+    b.lon = row.lon,
+    b.elevation_ft = row.elevation_ft
+"""
+
+_WEATHER = """
+UNWIND $rows AS row
+MERGE (w:WeatherCell {cell_id: row.cell_id})
+SET w.lat = row.lat,
+    w.lon = row.lon,
+    w.valid_time = row.valid_time,
+    w.ceiling_ft = row.ceiling_ft,
+    w.vis_km = row.vis_km,
+    w.wind_kts = row.wind_kts,
+    w.cb_flag = row.cb_flag,
+    w.flyability = row.flyability,
+    w.source = row.source
+WITH w, row
+MATCH (b:Base {base_id: row.base_id})
+MERGE (w)-[:AFFECTS]->(b)
+"""
+
 
 async def sync_neo4j(
     uri: str,
@@ -89,6 +121,7 @@ async def sync_neo4j(
     threats: list[Threat],
     weapons: list[WeaponType],
     stocks: list[WeaponStock],
+    cells: list[WeatherCell],
 ) -> None:
     driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
     try:
@@ -101,6 +134,8 @@ async def sync_neo4j(
                 _cover_rows(targets),
                 _weapon_rows(weapons),
                 _stock_rows(stocks),
+                _base_rows(),
+                _weather_rows(cells),
             )
     finally:
         await driver.close()
@@ -114,6 +149,8 @@ async def _write_graph(
     cover_rows: list[dict],
     weapon_rows: list[dict],
     stock_rows: list[dict],
+    base_rows: list[dict],
+    weather_rows: list[dict],
 ) -> None:
     await _consume(tx, _CLEAR)
     await _consume(tx, _TARGETS, rows=target_rows)
@@ -128,6 +165,33 @@ async def _write_graph(
         await _consume(tx, _WEAPON_TYPES, rows=weapon_rows)
     if stock_rows:
         await _consume(tx, _STOCKS, rows=stock_rows)
+    await _write_weather(tx, base_rows, weather_rows)
+
+
+async def sync_weather_graph(
+    uri: str,
+    user: str,
+    password: str,
+    cells: list[WeatherCell],
+) -> None:
+    driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+    try:
+        async with driver.session() as session:
+            await session.execute_write(_write_weather_only, _base_rows(), _weather_rows(cells))
+    finally:
+        await driver.close()
+
+
+async def _write_weather_only(tx, base_rows: list[dict], weather_rows: list[dict]) -> None:
+    await _write_weather(tx, base_rows, weather_rows)
+
+
+async def _write_weather(tx, base_rows: list[dict], weather_rows: list[dict]) -> None:
+    await _consume(tx, _CLEAR_WEATHER)
+    if base_rows:
+        await _consume(tx, _BASES, rows=base_rows)
+    if weather_rows:
+        await _consume(tx, _WEATHER, rows=weather_rows)
 
 
 async def _consume(tx, query: str, **kwargs: object) -> None:
@@ -195,6 +259,39 @@ def _stock_rows(stocks: list[WeaponStock]) -> list[dict]:
             "quantity": stock.quantity,
         }
         for stock in stocks
+    ]
+
+
+def _base_rows() -> list[dict]:
+    return [
+        {
+            "base_id": airfield.base_id,
+            "name": airfield.name,
+            "icao": airfield.icao,
+            "lat": airfield.lat,
+            "lon": airfield.lon,
+            "elevation_ft": airfield.elevation_ft,
+        }
+        for airfield in BASES
+    ]
+
+
+def _weather_rows(cells: list[WeatherCell]) -> list[dict]:
+    return [
+        {
+            "cell_id": f"wx:{airfield.icao}",
+            "base_id": airfield.base_id,
+            "lat": cell.lat,
+            "lon": cell.lon,
+            "valid_time": cell.time.isoformat(),
+            "ceiling_ft": cell.ceiling_ft,
+            "vis_km": cell.visibility_km,
+            "wind_kts": cell.wind_kts,
+            "cb_flag": cell.cb_flag,
+            "flyability": cell.flyability,
+            "source": cell.source,
+        }
+        for airfield, cell in cells_for_bases(cells)
     ]
 
 

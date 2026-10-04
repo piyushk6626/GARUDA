@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from pathlib import Path
 
@@ -37,7 +38,11 @@ async def _seed_roundtrip() -> None:
     assert result.load_configs == len(scenario.load_configs)
     assert result.compatibilities == len(scenario.compatibilities)
     assert result.stock_keys == len(scenario.stocks)
-    assert result.events == len(scenario.missions) + len(scenario.threats) + len(scenario.stocks)
+    assert result.cells == len(scenario.cells)
+    assert result.observations == len(scenario.observations)
+    assert result.events == (
+        len(scenario.missions) + len(scenario.threats) + len(scenario.stocks) + 8
+    )
 
     connection = await asyncpg.connect(os.environ["DATABASE_URL"])
     try:
@@ -48,6 +53,8 @@ async def _seed_roundtrip() -> None:
         stored_stocks = await connection.fetchval("SELECT count(*) FROM weapon_stock")
         stored_loads = await connection.fetchval("SELECT count(*) FROM load_config")
         stored_compat = await connection.fetchval("SELECT count(*) FROM weapon_compatibility")
+        stored_cells = await connection.fetchval("SELECT count(*) FROM weather_grid")
+        stored_obs = await connection.fetchval("SELECT count(*) FROM weather_station_obs")
     finally:
         await connection.close()
     assert stored == len(scenario.missions)
@@ -57,6 +64,8 @@ async def _seed_roundtrip() -> None:
     assert stored_stocks == len(scenario.stocks)
     assert stored_loads == len(scenario.load_configs)
     assert stored_compat == len(scenario.compatibilities)
+    assert stored_cells == len(scenario.cells)
+    assert stored_obs == len(scenario.observations)
 
     client = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
     try:
@@ -64,9 +73,14 @@ async def _seed_roundtrip() -> None:
         active = await client.zcard("threat:active")
         sample = scenario.stocks[0]
         stored_qty = await client.get(f"stock:{sample.base_id}:{sample.weapon_code}")
+        viax = await client.get("wx:base:VIAX")
+        grid_keys = [key async for key in client.scan_iter(match="wx:grid:*", count=200)]
     finally:
         await client.aclose()
     assert pending == len(scenario.missions)
     assert active == result.active_threats
     assert stored_qty is not None
     assert int(stored_qty) == sample.quantity
+    assert viax is not None
+    assert json.loads(viax)["icao"] == "VIAX"
+    assert grid_keys

@@ -5,3 +5,4 @@ CREATE CONSTRAINT threat_pk IF NOT EXISTS FOR (th:Threat) REQUIRE th.threat_id I
 CREATE CONSTRAINT weapon_type_pk IF NOT EXISTS FOR (w:WeaponType) REQUIRE w.weapon_code IS UNIQUE;
 CREATE CONSTRAINT weapon_stock_pk IF NOT EXISTS FOR (s:WeaponStock) REQUIRE s.stock_id IS UNIQUE;
 CREATE CONSTRAINT base_pk IF NOT EXISTS FOR (b:Base) REQUIRE b.base_id IS UNIQUE;
+CREATE CONSTRAINT weather_cell_pk IF NOT EXISTS FOR (w:WeatherCell) REQUIRE w.cell_id IS UNIQUE;

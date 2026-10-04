@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from garuda.schemas.threat import Threat, ThreatTrack
 from garuda.schemas.weapon import Compatibility, LoadConfig, WeaponStock, WeaponType
+from garuda.schemas.weather import WeatherCell, WeatherStationObs
 
 TargetClass = Literal["RUNWAY", "RADAR", "BRIDGE", "ARMOUR", "C2", "FUEL_DEPOT"]
 MissionType = Literal["DCA", "CAP", "STRIKE", "SEAD", "CAS", "ISR", "AAR", "AIRLIFT", "SAR"]
@@ -80,3 +81,5 @@ class GeneratedScenario(BaseModel):
     stocks: list[WeaponStock]
     load_configs: list[LoadConfig]
     compatibilities: list[Compatibility]
+    cells: list[WeatherCell]
+    observations: list[WeatherStationObs]

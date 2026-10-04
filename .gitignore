@@ -101,6 +101,9 @@ ipython_config.py
 #   commonly ignored for libraries.
 # uv.lock
 
+# Live weather responses cached after a successful ingest.
+backend/fixtures/weather/last_good_*.json
+
 # poetry
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
