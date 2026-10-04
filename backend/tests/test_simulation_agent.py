@@ -16,16 +16,15 @@ from garuda.harness.simulation.tools import default_sub_agents
 from garuda.harness.tasks import TASKS, TaskSession
 from garuda.harness.tasks.tools import ASK_ONTOLOGY, ASK_RETRIEVAL, ASK_SPATIAL
 
-WHEN = datetime(2026, 6, 1, 6, 0, tzinfo=timezone.utc)
-WHEN_ISO = WHEN.isoformat()
+WHEN_ISO = T0.isoformat()
 MONTE_CARLO = "evaluate_plan_monte_carlo"
 RL_RETASK = "rl_retask"
 FINISH = {"status": "done", "assumptions": ["default run count"], "note": "ready for the main agent"}
 VALID = {
-    MONTE_CARLO: {"plan_id": "plan-1", "stress": "heavy_threat"},
+    MONTE_CARLO: {"plan_id": "P1", "stress": "heavy_threat", "n_runs": 500},
     RL_RETASK: {
-        "plan_id": "plan-1",
-        "event": {"type": "aircraft_nmc", "entity_id": "SU-A0123", "time": WHEN_ISO},
+        "plan_id": "P1",
+        "event": {"type": "aircraft_nmc", "entity_id": "SU-1", "time": WHEN_ISO},
     },
 }
 OUTPUT_KEY = {MONTE_CARLO: "value", RL_RETASK: "new_plan_id"}
@@ -50,9 +49,8 @@ class ScriptedModel:
         return self.script.pop(0)
 
 
-def _ctx() -> ToolContext:
-    blank = SimpleNamespace()
-    return ToolContext(scenario=blank, plans=blank, models=blank, providers=blank, scenario_time=WHEN)
+def _ctx():
+    return world_ctx()
 
 
 def _calls(*calls: tuple[str, dict, str]) -> AIMessage:

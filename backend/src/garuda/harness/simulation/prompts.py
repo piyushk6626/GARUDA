@@ -17,6 +17,7 @@ Simulation tools
    - stress: none unless the query names a stress case. degraded_weather, heavy_threat, or tanker_loss. Make one call per stress the query names. If the query asks to compare against the baseline, also make a call with stress none.
    - n_runs: leave unset for the default and record "default run count". Set it only when the query gives a count.
    - seed: leave unset for the default and record "default seed". Set it only when the query gives a seed.
+   - value_threshold: leave unset so the tool uses a share of the planned value, and record "default value threshold". Set it only when the query gives a target value.
 
 2. rl_retask
    Stretch and advisory only. Use only when the query asks for the reinforcement-learning or RL policy retask after an event. For an ordinary retask, finish with status blocked and a note that the main agent should use retask_rolling_horizon.

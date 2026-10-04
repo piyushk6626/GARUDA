@@ -71,7 +71,9 @@ def explain(problem: RetaskProblem, decision: Decision, new_plan_id: str) -> tup
         parent_plan_id=plan.plan_id,
         scenario_time=problem.event.time,
         assignments=assignments,
-        unassigned=[u for u in plan.unassigned if u.mission_id not in covered] + [u for u in unassigned if u.mission_id not in covered],
+        unassigned=list(
+            {u.mission_id: u for u in reversed(plan.unassigned + unassigned) if u.mission_id not in covered}.values()
+        )[::-1],
         sortie_slots=kept_slots,
         crew_assignments=[c for c in plan.crew_assignments if c.slot_id in kept_slot_ids],
         legs=[leg for leg in plan.legs if (leg.mission_id, leg.tail_no) not in removed_keys] + legs,

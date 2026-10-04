@@ -37,6 +37,7 @@ class MonteCarloInput(BaseModel):
     n_runs: int = 5000
     seed: int = 42
     stress: Literal["none","degraded_weather","heavy_threat","tanker_loss"] = "none"
+    value_threshold: float | None = None   # default: 80% of planned value
 
 class MonteCarloOutput(BaseModel):
     value: Distribution        # mean, p5, p50, p95
