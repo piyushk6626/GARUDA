@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
+from garuda.common import as_utc as _as_utc
 from garuda.config import ScenarioConfig
 from garuda.ingest.adsb import normalize_opensky_response
 from garuda.schemas.adsb import AdsbTrack
@@ -94,9 +95,3 @@ def _background(config: ScenarioConfig, seed: int, start: datetime) -> list[Adsb
                 )
             )
     return tracks
-
-
-def _as_utc(moment: datetime) -> datetime:
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)

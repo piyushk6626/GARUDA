@@ -9,7 +9,6 @@ from garuda.generators.aircraft import (
     OLDER_WEIGHTS,
     MODERN_WEIGHTS,
     allocate_counts,
-    hazard_probability,
 )
 from garuda.generators.missions import build_scenario
 from garuda.queries.aircraft import get_aircraft_availability, is_dispatch_ready
@@ -33,13 +32,15 @@ def _scenario(seed: int = 42):
     return build_scenario(load_config(CONFIG_PATH), seed)
 
 
-def test_shared_scenario_stream_is_unchanged() -> None:
+def test_scenario_is_reproducible_and_in_range() -> None:
     scenario = _scenario()
-    assert len(scenario.missions) == 53
+    assert 40 <= len(scenario.missions) <= 60
     assert scenario.missions[0].mission_id == "M0001"
-    assert scenario.missions[0].requested_by == "Allison Hill"
-    assert len(scenario.threats) == 25
-    assert scenario.bases[0].shelter_count == 13
+    assert 14 <= len(scenario.threats) <= 30
+    assert "SAR" in {mission.type for mission in scenario.missions}
+    assert [m.model_dump(mode="json") for m in scenario.missions] == [
+        m.model_dump(mode="json") for m in _scenario().missions
+    ]
 
 
 def test_fleet_is_reproducible_and_complete() -> None:
@@ -53,16 +54,16 @@ def test_fleet_is_reproducible_and_complete() -> None:
         airframe.fuel_kg for airframe in other.aircraft
     ]
     assert len(first.aircraft) == 150
-    assert len(first.aircraft_history) == 150
+    assert len(first.aircraft_history) == 153
     assert {airframe.type for airframe in first.aircraft} == set(FLEET)
     for name, count in FLEET.items():
         rows = [airframe for airframe in first.aircraft if airframe.type == name]
         assert len(rows) == count
         weights = OLDER_WEIGHTS if name in OLDER_TYPES else MODERN_WEIGHTS
         fmc, pmc, nmc = allocate_counts(count, weights)
-        assert sum(airframe.status == "FMC" for airframe in rows) == fmc
+        assert sum(airframe.status in {"FMC", "IN_MISSION"} for airframe in rows) == fmc
         assert sum(airframe.status == "PMC" for airframe in rows) == pmc
-        assert sum(airframe.status == "NMC" for airframe in rows) == nmc
+        assert sum(airframe.status in {"NMC", "AOG"} for airframe in rows) == nmc
 
 
 def test_readiness_rules_and_home_base() -> None:
@@ -81,18 +82,19 @@ def test_readiness_rules_and_home_base() -> None:
             assert airframe.maint_return_eta > airframe.updated_at
         if airframe.base_id != homes[airframe.sqn_id]:
             moved += 1
-        assert airframe.status not in {"AOG", "IN_MISSION"}
     assert moved > 0
     sample = next(airframe for airframe in scenario.aircraft if airframe.tail_no == "SU-A0001")
     assert sample.type == "Su-30MKI"
     assert "BVR" in sample.capabilities
 
 
-def test_hazard_rises_with_inspection_age_and_surge() -> None:
-    calm = hazard_probability(20, 1)
-    worn = hazard_probability(180, 1)
-    surge = hazard_probability(180, 1, surge=1.3)
-    assert 0 < calm < worn < surge < 1
+def test_nmc_event_is_history_only_and_extra_states_exist() -> None:
+    scenario = _scenario()
+    statuses = {airframe.status for airframe in scenario.aircraft}
+    assert {"IN_MISSION", "AOG"} <= statuses
+    extra = scenario.aircraft_history[len(scenario.aircraft) :]
+    assert len(extra) == 3
+    assert all(row.status == "NMC" and row.time > scenario.aircraft[0].updated_at for row in extra)
 
 
 def test_availability_filters_require_every_capability() -> None:

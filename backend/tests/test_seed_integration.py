@@ -27,7 +27,9 @@ async def _seed_roundtrip() -> None:
     from garuda.storage.seed import write_all
 
     scenario = build_scenario(load_config(CONFIG_PATH), 42)
-    result = await write_all(scenario)
+    from types import SimpleNamespace
+
+    result = SimpleNamespace(**await write_all(scenario))
     assert result.missions == len(scenario.missions)
     assert result.pending == len(scenario.missions)
     assert result.threats == len(scenario.threats)

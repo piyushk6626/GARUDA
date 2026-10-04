@@ -26,7 +26,8 @@ from garuda.generators.gis import (
     grid_shape,
     layers_from_elevation,
 )
-from garuda.storage.gis_files import gis_root, publish_terrain, write_terrain_files
+from garuda.storage.gis_files import gis_root, write_terrain_files
+from garuda.storage.minio import publish_terrain
 from garuda.storage.neo4j_sync import sync_bases
 from garuda.storage.postgres import upsert_gis
 from garuda.storage.redis_seed import write_base_cache

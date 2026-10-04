@@ -6,7 +6,7 @@ from garuda.schemas.aircraft import Aircraft, Squadron
 from garuda.schemas.airspace import AirspaceZone
 from garuda.schemas.crew import Crew
 from garuda.schemas.gis import BaseRecord
-from garuda.schemas.mission import Mission, Target
+from garuda.schemas.mission import GeneratedScenario, Mission, Target
 from garuda.schemas.threat import Threat
 from garuda.schemas.weapon import WeaponStock, WeaponType
 from garuda.schemas.weather import WeatherCell
@@ -191,85 +191,41 @@ MERGE (m)-[:USES_AIRSPACE]->(z)
 """
 
 
-async def sync_neo4j(
-    uri: str,
-    user: str,
-    password: str,
-    targets: list[Target],
-    missions: list[Mission],
-    threats: list[Threat],
-    weapons: list[WeaponType],
-    stocks: list[WeaponStock],
-    cells: list[WeatherCell],
-    bases: list[BaseRecord],
-    squadrons: list[Squadron],
-    aircraft: list[Aircraft],
-    crew: list[Crew],
-    zones: list[AirspaceZone],
-) -> None:
+async def sync_neo4j(uri: str, user: str, password: str, scenario: GeneratedScenario) -> None:
     driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
     try:
         async with driver.session() as session:
-            await session.execute_write(
-                _write_graph,
-                _target_rows(targets),
-                _mission_rows(missions),
-                _threat_rows(threats),
-                _cover_rows(targets),
-                _weapon_rows(weapons),
-                _stock_rows(stocks),
-                _base_rows(bases),
-                _weather_rows(cells),
-                _squadron_rows(squadrons),
-                _aircraft_rows(aircraft),
-                _crew_rows(crew),
-                _qualification_rows(crew),
-                _airspace_rows(zones),
-            )
+            await session.execute_write(_write_graph, scenario)
     finally:
         await driver.close()
 
 
-async def _write_graph(
-    tx,
-    target_rows: list[dict],
-    mission_rows: list[dict],
-    threat_rows: list[dict],
-    cover_rows: list[dict],
-    weapon_rows: list[dict],
-    stock_rows: list[dict],
-    base_rows: list[dict],
-    weather_rows: list[dict],
-    squadron_rows: list[dict],
-    aircraft_rows: list[dict],
-    crew_rows: list[dict],
-    qualification_rows: list[dict],
-    airspace_rows: list[dict],
-) -> None:
+async def _write_graph(tx, scenario: GeneratedScenario) -> None:
+    mission_rows = _mission_rows(scenario.missions)
+    steps = (
+        (_TARGETS, _target_rows(scenario.targets)),
+        (_MISSIONS, mission_rows),
+        (_THREATS, _threat_rows(scenario.threats)),
+        (_LINKS, [row for row in mission_rows if row["target_id"] is not None]),
+        (_COVERS, _cover_rows(scenario.targets)),
+        (_WEAPON_TYPES, _weapon_rows(scenario.weapons)),
+        (_STOCKS, _stock_rows(scenario.stocks)),
+    )
     await _consume(tx, _CLEAR)
-    await _consume(tx, _TARGETS, rows=target_rows)
-    await _consume(tx, _MISSIONS, rows=mission_rows)
-    await _consume(tx, _THREATS, rows=threat_rows)
-    linked = [row for row in mission_rows if row["target_id"] is not None]
-    if linked:
-        await _consume(tx, _LINKS, rows=linked)
-    if cover_rows:
-        await _consume(tx, _COVERS, rows=cover_rows)
-    if weapon_rows:
-        await _consume(tx, _WEAPON_TYPES, rows=weapon_rows)
-    if stock_rows:
-        await _consume(tx, _STOCKS, rows=stock_rows)
-    await _write_weather(tx, base_rows, weather_rows)
-    if squadron_rows:
-        await _consume(tx, _SQUADRONS, rows=squadron_rows)
-    if aircraft_rows:
-        await _consume(tx, _AIRCRAFT, rows=aircraft_rows)
-    if crew_rows:
-        await _consume(tx, _CREW, rows=crew_rows)
-    if qualification_rows:
-        await _consume(tx, _QUALIFIED, rows=qualification_rows)
-    if airspace_rows:
-        await _consume(tx, _AIRSPACE, rows=airspace_rows)
+    for query, rows in steps:
+        if rows:
+            await _consume(tx, query, rows=rows)
+    await _write_weather(tx, _base_rows(scenario.bases), _weather_rows(scenario.cells))
+    later = (
+        (_SQUADRONS, _squadron_rows(scenario.squadrons)),
+        (_AIRCRAFT, _aircraft_rows(scenario.aircraft)),
+        (_CREW, _crew_rows(scenario.crew)),
+        (_QUALIFIED, _qualification_rows(scenario.crew)),
+        (_AIRSPACE, _airspace_rows(scenario.zones)),
+    )
+    for query, rows in later:
+        if rows:
+            await _consume(tx, query, rows=rows)
 
 
 async def sync_weather_graph(

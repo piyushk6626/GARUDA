@@ -12,6 +12,7 @@ import numpy as np
 from faker import Faker
 from shapely.geometry import Polygon
 
+from garuda.common import as_utc as _as_utc, stream_rng
 from garuda.config import ScenarioConfig
 from garuda.generators.adsb import build_adsb
 from garuda.generators.aircraft import build_aircraft
@@ -32,7 +33,8 @@ TYPE_WEIGHTS: dict[str, float] = {
     "DCA": 0.125,
     "CAP": 0.125,
     "STRIKE": 0.20,
-    "CAS": 0.15,
+    "CAS": 0.10,
+    "SAR": 0.05,
     "ISR": 0.15,
     "SEAD": 0.10,
     "AAR": 0.10,
@@ -48,6 +50,7 @@ TYPE_EFFECT: dict[str, MissionEffect] = {
     "ISR": "OBSERVE",
     "AAR": "OBSERVE",
     "AIRLIFT": "OBSERVE",
+    "SAR": "OBSERVE",
 }
 
 TYPE_CAPABILITIES: dict[str, list[str]] = {
@@ -59,6 +62,7 @@ TYPE_CAPABILITIES: dict[str, list[str]] = {
     "ISR": ["ISR_SENSOR"],
     "AAR": ["AAR_OFFLOAD"],
     "AIRLIFT": ["AIRLIFT"],
+    "SAR": ["SAR_SENSOR"],
 }
 
 TYPE_PACKAGE: dict[str, tuple[int, int]] = {
@@ -70,6 +74,7 @@ TYPE_PACKAGE: dict[str, tuple[int, int]] = {
     "ISR": (1, 2),
     "AAR": (1, 1),
     "AIRLIFT": (1, 2),
+    "SAR": (1, 2),
 }
 
 TARGET_POLICY = {
@@ -81,18 +86,18 @@ TARGET_POLICY = {
     "ISR": "optional",
     "AAR": "none",
     "AIRLIFT": "required",
+    "SAR": "none",
 }
 
 
 def build_scenario(config: ScenarioConfig, seed: int) -> GeneratedScenario:
-    rng = np.random.default_rng(seed)
     weapons, stocks, load_configs, compatibilities = build_weapons(config, seed)
-    threats, tracks, clusters = build_threats(config, rng)
-    targets = build_targets(config, rng, clusters)
+    threats, tracks, clusters = build_threats(config, stream_rng(seed, 101))
+    targets = build_targets(config, stream_rng(seed, 102), clusters)
     bases, features, borders, distances, terrain = build_gis(config, seed, targets)
-    missions = _build_missions(config, seed, rng, targets)
+    missions = _build_missions(config, seed, stream_rng(seed, 103), targets)
     suppress_sead_site(threats, missions, targets)
-    cells, observations = build_weather(config, rng)
+    cells, observations = build_weather(config, stream_rng(seed, 104))
     aircraft_types, squadrons, aircraft, aircraft_history = build_aircraft(config, seed)
     crew, crew_duty = build_crew(config, seed, aircraft, squadrons)
     zones = build_airspace(config, seed, missions)
@@ -167,7 +172,7 @@ def _build_missions(
                 window_end=window_end,
                 duration_min=duration_min,
                 target_id=_pick_target(mission_type, targets, rng),
-                area_wkt=_area_wkt(config, rng) if mission_type in {"CAP", "ISR"} else None,
+                area_wkt=_area_wkt(config, rng) if mission_type in {"CAP", "ISR", "SAR"} else None,
                 required_capabilities=list(TYPE_CAPABILITIES[mission_type]),
                 min_aircraft=TYPE_PACKAGE[mission_type][0],
                 max_aircraft=TYPE_PACKAGE[mission_type][1],
@@ -179,7 +184,7 @@ def _build_missions(
 
     _inject_p1_requests(missions, config, targets, start)
     _link_sead_strike(missions, start, horizon_end)
-    return [Mission.model_validate(mission.model_dump()) for mission in missions]
+    return missions
 
 
 def _inject_p1_requests(
@@ -315,9 +320,3 @@ def _as_mission_type(label: str) -> MissionType:
     if label not in TYPE_EFFECT:
         raise ValueError(f"unknown mission type {label}")
     return cast(MissionType, label)
-
-
-def _as_utc(moment: datetime) -> datetime:
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)

@@ -16,6 +16,7 @@ from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform
 
+from garuda.common import as_utc as _as_utc
 from garuda.config import ScenarioConfig
 from garuda.generators.gis import BORDER_GEOJSON
 from garuda.schemas.airspace import AirspaceZone
@@ -306,9 +307,3 @@ def _load_border(path: Path) -> LineString:
 
 def _project(geometry: BaseGeometry) -> BaseGeometry:
     return transform(_TO_METRIC.transform, geometry)
-
-
-def _as_utc(moment: datetime) -> datetime:
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)

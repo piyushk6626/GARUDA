@@ -14,6 +14,7 @@ from garuda.generators.weapons import (
     station_limit_kg,
     stock_band,
 )
+from garuda.schemas.aircraft import canonical_type
 from garuda.schemas.weapon import TARGET_CLASSES, WeaponStock
 from garuda.storage.kafka_publish import STOCK_TOPIC, stock_event
 
@@ -112,8 +113,8 @@ def test_load_configs_respect_weight_and_compatibility() -> None:
 
     assert set(by_type) == set(MOUNTING_TYPES)
     assert all(3 <= count <= 6 for count in by_type.values())
-    support = set(config.fleet) - MOUNTING_TYPES
-    assert support == {"C-130J", "IL-78", "AEW"}
+    support = {canonical_type(name) for name in config.fleet} - MOUNTING_TYPES
+    assert support == {"C-130J", "IL-78", "AEW&C"}
     assert all(row.aircraft_type not in support for row in scenario.compatibilities)
     strike = next(load for load in scenario.load_configs if load.config_id == "SU30-STRIKE-1")
     assert strike.aircraft_type == "Su-30MKI"
@@ -143,3 +144,9 @@ def test_stock_event_id_is_stable() -> None:
     assert first["type"] == "weapons.stock.updated"
     assert first["version"] == 1
     assert set(first) == {"event_id", "type", "entity_id", "ts", "version", "payload"}
+
+
+def test_load_configs_use_fleet_type_names() -> None:
+    scenario = build_scenario(load_config(CONFIG_PATH), 42)
+    fleet_types = {airframe.type for airframe in scenario.aircraft}
+    assert {load.aircraft_type for load in scenario.load_configs} <= fleet_types

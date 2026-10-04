@@ -12,6 +12,7 @@ import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from garuda.common import as_utc as _as_utc
 from garuda.config import ScenarioConfig
 from garuda.generators.aircraft import allocate_counts, build_aircraft
 from garuda.schemas.aircraft import Aircraft, AircraftTypeName, Squadron
@@ -347,9 +348,3 @@ def _timeline(duty_hours: float, rest_hours: float) -> list[str]:
     for index in range(rest_start + sleep, 24):
         steps[index] = "awake"
     return steps
-
-
-def _as_utc(moment: datetime) -> datetime:
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)

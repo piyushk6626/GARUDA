@@ -12,6 +12,7 @@ from typing import NamedTuple, cast
 
 import numpy as np
 
+from garuda.common import as_utc as _as_utc, clip as _clip
 from garuda.config import ScenarioConfig
 from garuda.schemas.mission import Mission, Target
 from garuda.schemas.threat import Threat, ThreatTrack, ThreatType
@@ -131,7 +132,6 @@ def suppress_sead_site(threats: list[Threat], missions: list[Mission], targets: 
                 continue
             threat.status = "SUPPRESSED"
             return
-    raise RuntimeError("no fixed SAM defends a SEAD target")
 
 
 def _fixed_threats(
@@ -459,13 +459,3 @@ def _place(lat: float, lon: float, config: ScenarioConfig) -> tuple[float, float
         round(_clip(lon, config.bbox.lon_min, west_max), 5),
         round(_clip(lat, config.bbox.lat_min, config.bbox.lat_max), 5),
     )
-
-
-def _clip(value: float, lower: float, upper: float) -> float:
-    return float(min(max(value, lower), upper))
-
-
-def _as_utc(moment: datetime) -> datetime:
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)

@@ -10,59 +10,41 @@ from garuda.schemas.aircraft import Aircraft
 from garuda.schemas.airspace import AirspaceZone
 from garuda.schemas.crew import Crew
 from garuda.schemas.gis import BaseRecord
-from garuda.schemas.mission import Mission
-from garuda.schemas.threat import Threat
+from garuda.schemas.mission import GeneratedScenario
 from garuda.schemas.weapon import WeaponStock
 from garuda.schemas.weather import WeatherCell, WeatherStationObs
 
 
-async def seed_redis(
-    url: str,
-    missions: list[Mission],
-    threats: list[Threat],
-    stocks: list[WeaponStock],
-    cells: list[WeatherCell],
-    observations: list[WeatherStationObs],
-    bases: list[BaseRecord],
-    aircraft: list[Aircraft],
-    crew: list[Crew],
-    zones: list[AirspaceZone],
-    adsb_tracks: list[AdsbTrack],
-) -> tuple[int, int, int]:
+ADSB_TTL_S = 120
+
+
+async def _stale(client: Redis, pattern: str) -> list:
+    return [key async for key in client.scan_iter(match=pattern, count=500)]
+
+
+async def seed_redis(url: str, scenario: GeneratedScenario) -> tuple[int, int, int]:
     client = Redis.from_url(url)
     try:
-        pending = {
-            mission.mission_id: mission.priority
-            for mission in missions
-            if mission.status == "REQUESTED"
-        }
-        places: list[float | str] = []
-        active = 0
-        for threat in threats:
-            if threat.status != "ACTIVE":
-                continue
-            places.extend((threat.lon, threat.lat, threat.threat_id))
-            active += 1
-        stale = [key async for key in client.scan_iter(match="stock:*", count=200)]
+        pending = {m.mission_id: m.priority for m in scenario.missions if m.status == "REQUESTED"}
+        active = [t for t in scenario.threats if t.status == "ACTIVE"]
+        places: list[float | str] = [v for t in active for v in (t.lon, t.lat, t.threat_id)]
+        stale = await _stale(client, "stock:*")
         pipe = client.pipeline()
-        pipe.delete("missions:pending")
-        pipe.delete("threat:active")
-        if stale:
-            pipe.delete(*stale)
+        pipe.delete("missions:pending", "threat:active", *stale)
         if pending:
             pipe.zadd("missions:pending", pending)
         if places:
             pipe.geoadd("threat:active", places)
-        for stock in stocks:
+        for stock in scenario.stocks:
             pipe.set(_stock_key(stock), stock.quantity)
         await pipe.execute()
-        await write_weather_cache(client, cells, observations)
-        await write_base_cache(client, bases)
-        await write_aircraft_cache(client, aircraft)
-        await write_crew_cache(client, crew)
-        await write_airspace_cache(client, zones)
-        await write_adsb_cache(client, adsb_tracks)
-        return len(pending), active, len(stocks)
+        await write_weather_cache(client, scenario.cells, scenario.observations)
+        await write_base_cache(client, scenario.bases)
+        await write_aircraft_cache(client, scenario.aircraft)
+        await write_crew_cache(client, scenario.crew)
+        await write_airspace_cache(client, scenario.zones)
+        await write_adsb_cache(client, scenario.adsb_tracks)
+        return len(pending), len(active), len(scenario.stocks)
     finally:
         await client.aclose()
 
@@ -76,8 +58,8 @@ async def write_weather_cache(
     cells: list[WeatherCell],
     observations: list[WeatherStationObs],
 ) -> None:
-    stale_grid = [key async for key in client.scan_iter(match="wx:grid:*", count=500)]
-    stale_base = [key async for key in client.scan_iter(match="wx:base:*", count=50)]
+    stale_grid = await _stale(client, "wx:grid:*")
+    stale_base = await _stale(client, "wx:base:*")
     grouped: dict[str, dict[str, dict[str, object]]] = {}
     for cell in cells:
         hour = _hour_stamp(cell.time)
@@ -119,8 +101,8 @@ async def write_base_cache(client: Redis, bases: list[BaseRecord]) -> None:
 
 
 async def write_aircraft_cache(client: Redis, aircraft: list[Aircraft]) -> None:
-    stale_hashes = [key async for key in client.scan_iter(match="ac:*", count=500)]
-    stale_sets = [key async for key in client.scan_iter(match="base:*:fmc", count=100)]
+    stale_hashes = await _stale(client, "ac:*")
+    stale_sets = await _stale(client, "base:*:fmc")
     grouped: dict[str, list[str]] = {}
     for airframe in aircraft:
         if airframe.status == "FMC":
@@ -138,7 +120,7 @@ async def write_aircraft_cache(client: Redis, aircraft: list[Aircraft]) -> None:
 
 
 async def write_crew_cache(client: Redis, crew: list[Crew]) -> None:
-    stale = [key async for key in client.scan_iter(match="crew:*", count=500)]
+    stale = await _stale(client, "crew:*")
     pipe = client.pipeline()
     if stale:
         pipe.delete(*stale)
@@ -157,7 +139,7 @@ async def write_airspace_cache(client: Redis, zones: list[AirspaceZone]) -> None
 
 
 async def write_adsb_cache(client: Redis, tracks: list[AdsbTrack]) -> None:
-    stale = [key async for key in client.scan_iter(match="adsb:track:*", count=500)]
+    stale = await _stale(client, "adsb:track:*")
     places: list[float | str] = []
     latest = latest_tracks(tracks)
     for track in latest:
@@ -168,8 +150,13 @@ async def write_adsb_cache(client: Redis, tracks: list[AdsbTrack]) -> None:
         pipe.delete(*stale)
     if places:
         pipe.geoadd("adsb:live", places)
+        pipe.expire("adsb:live", ADSB_TTL_S)
     for track in latest:
-        pipe.set(f"adsb:track:{track.icao24}", json.dumps(track.model_dump(mode="json")))
+        pipe.set(
+            f"adsb:track:{track.icao24}",
+            json.dumps(track.model_dump(mode="json")),
+            ex=ADSB_TTL_S,
+        )
     await pipe.execute()
 
 

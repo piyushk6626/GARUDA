@@ -3,6 +3,7 @@
 import math
 from datetime import datetime, timedelta, timezone
 
+from garuda.common import as_utc as _as_utc
 from garuda.generators.weather import snap_half
 from garuda.schemas.weather import WeatherCell, WeatherRouteQuery, WeatherRouteResult, WeatherSegment
 
@@ -115,9 +116,3 @@ def _nearest_hour(moment: datetime) -> datetime:
     if moment - base >= timedelta(minutes=30):
         return base + timedelta(hours=1)
     return base
-
-
-def _as_utc(moment: datetime) -> datetime:
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)

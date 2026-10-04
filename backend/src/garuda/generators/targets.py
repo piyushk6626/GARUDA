@@ -1,5 +1,6 @@
 import numpy as np
 
+from garuda.common import clip as _clip
 from garuda.config import ScenarioConfig
 from garuda.generators.threats import ThreatCluster
 from garuda.schemas.mission import Target
@@ -45,7 +46,3 @@ def build_targets(
             )
         )
     return targets
-
-
-def _clip(value: float, lower: float, upper: float) -> float:
-    return float(min(max(value, lower), upper))

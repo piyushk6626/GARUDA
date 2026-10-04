@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 
+from garuda.common import as_utc as _as_utc
 from garuda.bases import BASES, Airfield, base_by_id
 from garuda.config import BoundingBox, ScenarioConfig
 from garuda.schemas.weather import FlightCategory, WeatherCell, WeatherSource, WeatherStationObs
@@ -348,9 +349,3 @@ def _metar(icao: str, moment: datetime, cell: WeatherCell, fog: bool) -> str:
 
 def _clamp(value: float, low: float, high: float) -> float:
     return min(high, max(low, value))
-
-
-def _as_utc(moment: datetime) -> datetime:
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)

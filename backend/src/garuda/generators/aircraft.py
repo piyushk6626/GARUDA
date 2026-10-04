@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from garuda.common import as_utc as _as_utc, stream_rng
 from garuda.bases import BASES
 from garuda.config import ScenarioConfig
 from garuda.schemas.aircraft import (
@@ -102,23 +103,48 @@ def allocate_counts(total: int, weights: tuple[float, ...]) -> list[int]:
     return counts
 
 
-def failure_hazard(hours_since_inspection: float, *, surge: float = 1.0) -> float:
-    """Per flight-hour failure hazard. It rises with time since inspection."""
-    if hours_since_inspection < 0 or surge <= 0:
-        raise ValueError("hazard inputs must be non-negative and surge must be positive")
-    return 0.002 * (1.0 + hours_since_inspection / 100.0) * surge
+IN_MISSION_SHARE = 0.05
+AOG_SHARE_OF_NMC = 0.15
+OVERLAY_STREAM = 23
 
 
-def hazard_probability(
-    hours_since_inspection: float,
-    dt_hours: float,
-    *,
-    surge: float = 1.0,
-) -> float:
-    if dt_hours < 0:
-        raise ValueError("dt_hours must be non-negative")
-    rate = failure_hazard(hours_since_inspection, surge=surge)
-    return 1.0 - math.exp(-rate * dt_hours)
+def _overlay_states(
+    aircraft: list[Aircraft],
+    config: ScenarioConfig,
+    start: datetime,
+    rng: np.random.Generator,
+) -> tuple[list[Aircraft], list[AircraftHistory]]:
+    """Add IN_MISSION and AOG airframes, and apply scripted `aircraft_nmc` events."""
+    result = list(aircraft)
+    extra: list[AircraftHistory] = []
+    for index, airframe in enumerate(result):
+        draw = float(rng.random())
+        if airframe.status == "FMC" and draw < IN_MISSION_SHARE:
+            result[index] = airframe.model_copy(update={"status": "IN_MISSION"})
+        elif airframe.status == "NMC" and draw < AOG_SHARE_OF_NMC:
+            result[index] = airframe.model_copy(update={"status": "AOG", "status_reason": "awaiting_parts"})
+    for event in config.events:
+        if event.type != "aircraft_nmc":
+            continue
+        moment = start + timedelta(hours=event.t)
+        pool = [i for i, item in enumerate(result) if item.status == "FMC"]
+        chosen = rng.permutation(len(pool))[: event.count or 1]
+        for pick in chosen:
+            index = pool[int(pick)]
+            airframe = result[index]
+            failed = airframe.model_copy(
+                update={
+                    "status": "NMC",
+                    "status_reason": "radar_fault",
+                    "maint_return_eta": moment + timedelta(hours=18),
+                    "updated_at": moment,
+                }
+            )
+            if event.t <= 0:
+                result[index] = failed
+            else:
+                extra.append(_history(failed))
+    return result, extra
 
 
 def build_aircraft(
@@ -159,7 +185,8 @@ def build_aircraft(
                 )
             )
     aircraft.sort(key=lambda item: item.tail_no)
-    history = [_history(item) for item in aircraft]
+    aircraft, events = _overlay_states(aircraft, config, start, stream_rng(seed, OVERLAY_STREAM))
+    history = [_history(item) for item in aircraft] + events
     return [specs[name] for name in FLEET_TYPES], squadrons, aircraft, history
 
 
@@ -234,9 +261,3 @@ def _history(aircraft: Aircraft) -> AircraftHistory:
         flight_hours_total=aircraft.flight_hours_total,
         hours_to_next_inspection=aircraft.hours_to_next_inspection,
     )
-
-
-def _as_utc(moment: datetime) -> datetime:
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)

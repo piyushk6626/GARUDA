@@ -1,49 +1,21 @@
 import os
-from dataclasses import dataclass
 
 from garuda.config import BoundingBox
 from garuda.generators.gis import build_terrain
 from garuda.schemas.mission import GeneratedScenario
-from garuda.storage.gis_files import gis_root, publish_terrain, write_terrain_files
-from garuda.storage.kafka_publish import (
-    publish_adsb,
-    publish_aircraft,
-    publish_airspace,
-    publish_crew,
-    publish_missions,
-    publish_stocks,
-    publish_threats,
-    publish_weather,
-)
+from garuda.storage.gis_files import gis_root, write_terrain_files
+from garuda.storage.kafka_publish import publish_scenario
+from garuda.storage.minio import publish_raw, publish_terrain
 from garuda.storage.neo4j_sync import sync_neo4j
 from garuda.storage.postgres import seed_postgres
 from garuda.storage.redis_seed import seed_redis
 
-
-@dataclass(frozen=True)
-class SeedResult:
-    targets: int
-    missions: int
-    pending: int
-    events: int
-    threats: int
-    tracks: int
-    active_threats: int
-    weapons: int
-    stocks: int
-    load_configs: int
-    compatibilities: int
-    stock_keys: int
-    cells: int
-    observations: int
-    bases: int
-    features: int
-    borders: int
-    distances: int
-    aircraft: int
-    crew: int
-    zones: int
-    adsb_tracks: int
+SCENARIO_LISTS = (
+    "targets", "missions", "threats", "tracks", "weapons", "stocks", "load_configs",
+    "compatibilities", "cells", "observations", "bases", "features", "borders", "distances",
+    "aircraft_types", "squadrons", "aircraft", "aircraft_history", "crew", "crew_duty",
+    "zones", "adsb_tracks",
+)
 
 
 def postgres_dsn() -> str:
@@ -66,104 +38,32 @@ def kafka_bootstrap() -> str:
     return os.environ.get("KAFKA_BOOTSTRAP", "localhost:19092")
 
 
-async def write_all(scenario: GeneratedScenario) -> SeedResult:
-    await seed_postgres(
-        postgres_dsn(),
-        scenario.targets,
-        scenario.missions,
-        scenario.threats,
-        scenario.tracks,
-        scenario.weapons,
-        scenario.stocks,
-        scenario.load_configs,
-        scenario.compatibilities,
-        scenario.cells,
-        scenario.observations,
-        scenario.bases,
-        scenario.features,
-        scenario.borders,
-        scenario.distances,
-        scenario.aircraft_types,
-        scenario.squadrons,
-        scenario.aircraft,
-        scenario.aircraft_history,
-        scenario.crew,
-        scenario.crew_duty,
-        scenario.zones,
-        scenario.adsb_tracks,
-    )
-    uri, user, password = neo4j_settings()
-    await sync_neo4j(
-        uri,
-        user,
-        password,
-        scenario.targets,
-        scenario.missions,
-        scenario.threats,
-        scenario.weapons,
-        scenario.stocks,
-        scenario.cells,
-        scenario.bases,
-        scenario.squadrons,
-        scenario.aircraft,
-        scenario.crew,
-        scenario.zones,
-    )
-    pending, active, stock_keys = await seed_redis(
-        redis_url(),
-        scenario.missions,
-        scenario.threats,
-        scenario.stocks,
-        scenario.cells,
-        scenario.observations,
-        scenario.bases,
-        scenario.aircraft,
-        scenario.crew,
-        scenario.zones,
-        scenario.adsb_tracks,
-    )
-    events = await publish_missions(kafka_bootstrap(), scenario.missions)
-    events += await publish_threats(kafka_bootstrap(), scenario.threats)
-    events += await publish_stocks(kafka_bootstrap(), scenario.stocks)
-    events += await publish_weather(kafka_bootstrap(), scenario.cells, scenario.observations)
-    events += await publish_aircraft(kafka_bootstrap(), scenario.aircraft)
-    events += await publish_crew(kafka_bootstrap(), scenario.crew)
-    events += await publish_airspace(kafka_bootstrap(), scenario.zones)
-    events += await publish_adsb(kafka_bootstrap(), scenario.adsb_tracks)
+def scenario_counts(scenario: GeneratedScenario) -> dict[str, int]:
+    counts = {name: len(getattr(scenario, name)) for name in SCENARIO_LISTS}
+    counts["terrain_cells"] = scenario.terrain.rows * scenario.terrain.cols
+    return counts
+
+
+async def write_all(scenario: GeneratedScenario) -> dict[str, int]:
+    await seed_postgres(postgres_dsn(), scenario)
+    await sync_neo4j(*neo4j_settings(), scenario)
+    pending, active, stock_keys = await seed_redis(redis_url(), scenario)
+    events = await publish_scenario(kafka_bootstrap(), scenario)
     terrain = scenario.terrain
-    grid = build_terrain(
-        BoundingBox(
-            lat_min=terrain.lat_min,
-            lat_max=terrain.lat_max,
-            lon_min=terrain.lon_min,
-            lon_max=terrain.lon_max,
-        ),
-        scenario.seed,
+    bbox = BoundingBox(
+        lat_min=terrain.lat_min,
+        lat_max=terrain.lat_max,
+        lon_min=terrain.lon_min,
+        lon_max=terrain.lon_max,
     )
     root = gis_root()
-    write_terrain_files(grid, root)
-    publish_terrain(root)
-    return SeedResult(
-        targets=len(scenario.targets),
-        missions=len(scenario.missions),
-        pending=pending,
-        events=events,
-        threats=len(scenario.threats),
-        tracks=len(scenario.tracks),
-        active_threats=active,
-        weapons=len(scenario.weapons),
-        stocks=len(scenario.stocks),
-        load_configs=len(scenario.load_configs),
-        compatibilities=len(scenario.compatibilities),
-        stock_keys=stock_keys,
-        cells=len(scenario.cells),
-        observations=len(scenario.observations),
-        bases=len(scenario.bases),
-        features=len(scenario.features),
-        borders=len(scenario.borders),
-        distances=len(scenario.distances),
-        aircraft=len(scenario.aircraft),
-        crew=len(scenario.crew),
-        zones=len(scenario.zones),
-        adsb_tracks=len(scenario.adsb_tracks),
-    )
+    write_terrain_files(build_terrain(bbox, scenario.seed), root)
+    objects = publish_terrain(root) + publish_raw(scenario, bbox)
+    return {
+        **scenario_counts(scenario),
+        "pending": pending,
+        "active_threats": active,
+        "stock_keys": stock_keys,
+        "events": events,
+        "minio_objects": objects,
+    }

@@ -30,28 +30,6 @@ def write_terrain_files(grid: TerrainGrid, root: Path) -> None:
     _geotiff(root / DEM_KEY, grid)
 
 
-def publish_terrain(root: Path) -> int:
-    endpoint = os.environ.get("MINIO_ENDPOINT")
-    if not endpoint:
-        return 0
-    import boto3
-    from botocore.config import Config
-
-    client = boto3.client(
-        "s3",
-        endpoint_url=endpoint,
-        aws_access_key_id=os.environ.get("MINIO_ROOT_USER", "garuda"),
-        aws_secret_access_key=os.environ.get("MINIO_ROOT_PASSWORD", "garuda-secret"),
-        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
-        config=Config(signature_version="s3v4"),
-    )
-    bucket = os.environ.get("MINIO_BUCKET", "garuda")
-    keys = (DEM_NPY, DEM_KEY, MASK_NPY, PENALTY_NPY)
-    for key in keys:
-        client.upload_file(str(root / key), bucket, key)
-    return len(keys)
-
-
 def _memmap(path: Path, values: np.ndarray) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():

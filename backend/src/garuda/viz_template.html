@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GARUDA data layer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  body { margin: 0; font: 13px system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+  header { padding: 6px 12px; background: #14213d; color: #fff; }
+  header span { margin-right: 12px; white-space: nowrap; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #map { flex: 3; }
+  aside { flex: 2; display: flex; flex-direction: column; min-width: 380px; border-left: 1px solid #ccc; }
+  nav { display: flex; flex-wrap: wrap; background: #eee; }
+  nav button { border: 0; padding: 6px 10px; background: none; cursor: pointer; }
+  nav button.on { background: #fff; font-weight: 600; }
+  #panel { flex: 1; overflow: auto; padding: 8px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border-bottom: 1px solid #ddd; padding: 2px 6px; text-align: left; white-space: nowrap; }
+  th { position: sticky; top: 0; background: #fafafa; cursor: pointer; }
+  .bar { display: inline-block; height: 10px; background: #3a86ff; vertical-align: middle; }
+</style>
+</head>
+<body>
+<header id="head"></header>
+<main>
+  <div id="map"></div>
+  <aside><nav id="tabs"></nav><div id="panel"></div></aside>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const DATA = __DATA__;
+const $ = (id) => document.getElementById(id);
+const map = L.map("map").setView([27.5, 73], 6);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 12, attribution: "&copy; OpenStreetMap" }).addTo(map);
+
+const ZONE_COLOR = { CAP: "#2a9d8f", AAR_TRACK: "#8338ec", CORRIDOR: "#3a86ff", TRA: "#f77f00", ADIZ: "#d00000", RESTRICTED: "#9d0208", PROHIBITED: "#6a040f", DANGER: "#e85d04", CTR: "#577590", TMA: "#43aa8b" };
+const THREAT_COLOR = { ACTIVE: "#d00000", SUPPRESSED: "#f4a261", DESTROYED: "#888", UNKNOWN: "#9d4edd" };
+const flyColor = (f) => `hsl(${Math.round(f * 120)},70%,50%)`;
+const geo = (items, style, popup) => L.geoJSON(items.filter((i) => i.geometry).map((i) => ({ type: "Feature", properties: i, geometry: i.geometry })), {
+  style: (f) => style(f.properties), pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 3, ...style(f.properties) }),
+  onEachFeature: (f, l) => l.bindPopup(popup(f.properties)),
+});
+const tip = (o, keys) => keys.map((k) => `<b>${k}</b>: ${o[k]}`).join("<br>");
+
+const layers = {
+  "Bases": L.layerGroup(DATA.bases.map((b) => L.marker([b.lat, b.lon]).bindPopup(tip(b, ["base_id", "name", "icao", "runway_length_m", "shelter_count", "fuel_capacity_l"])))),
+  "Borders": geo(DATA.borders, () => ({ color: "#000", weight: 2, dashArray: "6 4" }), (p) => p.name),
+  "GIS features": geo(DATA.features, (p) => ({ color: p.kind === "road" ? "#6c757d" : p.kind === "city" ? "#212529" : "#0077b6", weight: 1 }), (p) => `${p.kind}: ${p.name}`),
+  "Airspace": geo(DATA.zones, (p) => ({ color: ZONE_COLOR[p.type] || "#555", weight: 1, fillOpacity: 0.15 }), (p) => tip(p, ["zone_id", "name", "type", "floor_ft", "ceiling_ft", "active_from", "active_to"])),
+  "Threats": L.layerGroup(DATA.threats.flatMap((t) => [
+    L.circle([t.lat, t.lon], { radius: t.engagement_range_km * 1000, color: THREAT_COLOR[t.status], weight: 1, fillOpacity: 0.06 }),
+    L.circleMarker([t.lat, t.lon], { radius: 5, color: THREAT_COLOR[t.status] }).bindPopup(tip(t, ["threat_id", "type", "status", "engagement_range_km", "confidence"])),
+  ])),
+  "Threat tracks": L.layerGroup(Object.values(DATA.tracks.reduce((a, p) => ((a[p.threat_id] ||= []).push([p.lat, p.lon]), a), {})).map((pts) => L.polyline(pts, { color: "#d00000", weight: 1 }))),
+  "Targets": L.layerGroup(DATA.targets.map((t) => L.circleMarker([t.lat, t.lon], { radius: 6, color: "#000", fillColor: "#ffd60a", fillOpacity: 1 }).bindPopup(tip(t, ["target_id", "target_class", "value", "hardness"])))),
+  "Mission areas": geo(DATA.missions.map((m) => ({ ...m, geometry: m.area })), () => ({ color: "#06d6a0", weight: 1, fillOpacity: 0.1 }), (p) => tip(p, ["mission_id", "type", "priority"])),
+  "Weather (flyability)": L.layerGroup(DATA.weather.map(([la, lo, f, cb]) => L.rectangle([[la - 0.25, lo - 0.25], [la + 0.25, lo + 0.25]], { stroke: false, fillColor: flyColor(f), fillOpacity: cb ? 0.7 : 0.3 }))),
+  "ADS-B": L.layerGroup(DATA.adsb.map((a) => L.circleMarker([a.lat, a.lon], { radius: 3, color: "#023e8a" }).bindPopup(tip(a, ["icao24", "callsign", "alt_m", "speed_ms", "heading"])))),
+};
+const defaults = ["Bases", "Borders", "Airspace", "Threats", "Targets"];
+defaults.forEach((n) => layers[n].addTo(map));
+L.control.layers(null, layers, { collapsed: false }).addTo(map);
+
+// Header
+$("head").innerHTML = `<b>GARUDA</b> seed ${DATA.seed} &nbsp; ` + ["missions", "targets", "threats", "bases", "aircraft", "crew", "zones", "adsb_tracks", "weapons", "cells", "observations"].map((k) => `<span>${k}: ${DATA.counts[k]}</span>`).join("");
+
+// Tables
+const bars = (counter) => Object.entries(counter).map(([k, v]) => `<div>${k.padEnd(12, "\u00a0")} <span class="bar" style="width:${v * 3}px"></span> ${v}</div>`).join("");
+function table(rows, cols) {
+  let sortKey = null, asc = true;
+  const wrap = document.createElement("div");
+  const draw = () => {
+    const data = [...rows];
+    if (sortKey) data.sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : -1) * (asc ? 1 : -1));
+    wrap.innerHTML = `<table><thead><tr>${cols.map((c) => `<th data-k="${c}">${c}</th>`).join("")}</tr></thead><tbody>${data.map((r) => `<tr>${cols.map((c) => `<td>${r[c] ?? ""}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    wrap.querySelectorAll("th").forEach((th) => (th.onclick = () => { asc = sortKey === th.dataset.k ? !asc : true; sortKey = th.dataset.k; draw(); }));
+  };
+  draw();
+  return wrap;
+}
+const stockByBase = Object.values(DATA.stocks.reduce((a, s) => ((a[s.base_id] ||= { base_id: s.base_id, weapon_types: 0, rounds: 0 }), a[s.base_id].weapon_types++, (a[s.base_id].rounds += s.quantity), a), {}));
+const TABS = {
+  Missions: () => [bars(DATA.summary.mission_types), table(DATA.missions, ["mission_id", "type", "priority", "window_start", "duration_min", "target_id", "status"])],
+  Aircraft: () => [bars(DATA.summary.aircraft_status), table(DATA.aircraft, ["tail_no", "type", "base_id", "status", "status_reason", "fuel_kg", "hours_to_next_inspection"])],
+  Crew: () => [bars(DATA.summary.crew_medical), table(DATA.crew, ["crew_id", "callsign", "role", "base_id", "primary_type", "medical_status", "fatigue_score", "duty_hours_24h"])],
+  Weapons: () => [table(DATA.weapons, ["weapon_code", "category", "range_km", "weight_kg", "guidance"]), table(stockByBase, ["base_id", "weapon_types", "rounds"])],
+  Loads: () => [table(DATA.load_configs, ["config_id", "aircraft_type", "role", "total_weight_kg", "range_penalty_pct"])],
+  Threats: () => [table(DATA.threats, ["threat_id", "type", "status", "mobile", "engagement_range_km", "pk_base", "confidence"])],
+  Airspace: () => [table(DATA.zones, ["zone_id", "name", "type", "floor_ft", "ceiling_ft", "source", "capacity_per_hour"])],
+  Weather: () => [`<p>Grid shown for ${DATA.weather_time}. Base observations:</p>`, table(DATA.observations, ["icao", "obs_time", "flight_category", "ceiling_ft", "vis_km", "wind_kts", "flyability"])],
+  "ADS-B": () => [table(DATA.adsb, ["icao24", "callsign", "origin_country", "alt_m", "speed_ms", "heading", "on_ground"])],
+  Bases: () => [table(DATA.bases, ["base_id", "name", "icao", "runway_count", "runway_length_m", "shelter_count", "fuel_capacity_l", "max_sorties_per_hour"])],
+};
+function show(name) {
+  [...$("tabs").children].forEach((b) => b.classList.toggle("on", b.textContent === name));
+  $("panel").replaceChildren(...TABS[name]().map((x) => (typeof x === "string" ? Object.assign(document.createElement("div"), { innerHTML: x }) : x)));
+}
+Object.keys(TABS).forEach((name) => $("tabs").append(Object.assign(document.createElement("button"), { textContent: name, onclick: () => show(name) })));
+show("Missions");
+</script>
+</body>
+</html>

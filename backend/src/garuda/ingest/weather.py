@@ -12,6 +12,7 @@ from pathlib import Path
 
 import httpx
 
+from garuda.common import as_utc as _as_utc
 from garuda.bases import BASES, base_by_icao
 from garuda.config import BoundingBox
 from garuda.generators.weather import (
@@ -317,11 +318,6 @@ def _parse_time(value: object) -> datetime:
         return moment.replace(tzinfo=timezone.utc)
     return moment.astimezone(timezone.utc)
 
-
-def _as_utc(moment: datetime) -> datetime:
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)
 
 
 def _prefer(last: Path, sample: Path) -> Path:

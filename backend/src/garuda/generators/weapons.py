@@ -11,6 +11,7 @@ from typing import NamedTuple
 
 import numpy as np
 
+from garuda.common import as_utc as _as_utc
 from garuda.config import ScenarioConfig
 from garuda.schemas.weapon import (
     TARGET_CLASSES,
@@ -226,7 +227,7 @@ _AIRFRAMES = (
         ),
     ),
     _Airframe(
-        "Heli",
+        "helicopter",
         "HELI",
         800,
         {"S1": 200, "S2": 400, "S3": 200},
@@ -408,9 +409,3 @@ def _compatibilities() -> list[Compatibility]:
                 )
             )
     return rows
-
-
-def _as_utc(moment: datetime) -> datetime:
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)
