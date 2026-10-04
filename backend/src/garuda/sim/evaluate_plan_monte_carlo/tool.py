@@ -1,10 +1,14 @@
+import asyncio
+
 from garuda.contracts.results import Distribution, Sensitivity
 from garuda.contracts.tool import ToolContext, ToolSpec
+from garuda.sim.evaluate_plan_monte_carlo.explain import explain
+from garuda.sim.evaluate_plan_monte_carlo.model import solve
+from garuda.sim.evaluate_plan_monte_carlo.problem import build_problem
 from garuda.sim.evaluate_plan_monte_carlo.schemas import (
     EvaluatePlanMonteCarloInput,
     EvaluatePlanMonteCarloOutput,
 )
-from garuda.tools.stubs import fixed
 
 SPEC = ToolSpec(
     name="evaluate_plan_monte_carlo",
@@ -29,9 +33,9 @@ STUB_OUTPUT = EvaluatePlanMonteCarloOutput(
 async def evaluate_plan_monte_carlo(
     payload: EvaluatePlanMonteCarloInput, ctx: ToolContext
 ) -> EvaluatePlanMonteCarloOutput:
-    """Skeleton: same output for every input until the simulator is wired."""
-    _ = payload, ctx
-    return fixed(STUB_OUTPUT)
+    problem = build_problem(payload, ctx)
+    simulation = await asyncio.to_thread(solve, problem)
+    return explain(problem, simulation)
 
 
 # TODO(phase1): from garuda.tools.registry import register; register(SPEC, evaluate_plan_monte_carlo)
