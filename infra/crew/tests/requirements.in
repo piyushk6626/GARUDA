@@ -1,5 +1,0 @@
-# Test dependencies are frozen in the repository-wide uv.lock.
--e ../..
-pytest==8.4.2
-pytest-asyncio==1.2.0
-confluent-kafka==2.11.1

@@ -44,8 +44,19 @@ async def _seed_roundtrip() -> None:
     assert result.features == len(scenario.features)
     assert result.borders == len(scenario.borders)
     assert result.distances == len(scenario.bases) * len(scenario.targets)
+    assert result.aircraft == len(scenario.aircraft) == 150
+    assert result.crew == len(scenario.crew) == 300
+    assert result.zones == len(scenario.zones) == 20
+    assert result.adsb_tracks == len(scenario.adsb_tracks)
     assert result.events == (
-        len(scenario.missions) + len(scenario.threats) + len(scenario.stocks) + 8
+        len(scenario.missions)
+        + len(scenario.threats)
+        + len(scenario.stocks)
+        + 8
+        + len(scenario.aircraft)
+        + len(scenario.crew)
+        + len(scenario.zones)
+        + len(scenario.adsb_tracks)
     )
 
     connection = await asyncpg.connect(os.environ["DATABASE_URL"])
@@ -63,6 +74,10 @@ async def _seed_roundtrip() -> None:
         stored_features = await connection.fetchval("SELECT count(*) FROM geo_feature")
         stored_borders = await connection.fetchval("SELECT count(*) FROM border")
         stored_distances = await connection.fetchval("SELECT count(*) FROM base_target_distance")
+        stored_aircraft = await connection.fetchval("SELECT count(*) FROM aircraft")
+        stored_crew = await connection.fetchval("SELECT count(*) FROM crew")
+        stored_zones = await connection.fetchval("SELECT count(*) FROM airspace_zone")
+        stored_adsb = await connection.fetchval("SELECT count(*) FROM adsb_track")
     finally:
         await connection.close()
     assert stored == len(scenario.missions)
@@ -78,6 +93,10 @@ async def _seed_roundtrip() -> None:
     assert stored_features == len(scenario.features)
     assert stored_borders == len(scenario.borders)
     assert stored_distances == len(scenario.distances)
+    assert stored_aircraft == len(scenario.aircraft)
+    assert stored_crew == len(scenario.crew)
+    assert stored_zones == len(scenario.zones)
+    assert stored_adsb == len(scenario.adsb_tracks)
 
     client = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
     try:

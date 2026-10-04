@@ -5,7 +5,16 @@ from garuda.config import BoundingBox
 from garuda.generators.gis import build_terrain
 from garuda.schemas.mission import GeneratedScenario
 from garuda.storage.gis_files import gis_root, publish_terrain, write_terrain_files
-from garuda.storage.kafka_publish import publish_missions, publish_stocks, publish_threats, publish_weather
+from garuda.storage.kafka_publish import (
+    publish_adsb,
+    publish_aircraft,
+    publish_airspace,
+    publish_crew,
+    publish_missions,
+    publish_stocks,
+    publish_threats,
+    publish_weather,
+)
 from garuda.storage.neo4j_sync import sync_neo4j
 from garuda.storage.postgres import seed_postgres
 from garuda.storage.redis_seed import seed_redis
@@ -31,6 +40,10 @@ class SeedResult:
     features: int
     borders: int
     distances: int
+    aircraft: int
+    crew: int
+    zones: int
+    adsb_tracks: int
 
 
 def postgres_dsn() -> str:
@@ -70,6 +83,14 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         scenario.features,
         scenario.borders,
         scenario.distances,
+        scenario.aircraft_types,
+        scenario.squadrons,
+        scenario.aircraft,
+        scenario.aircraft_history,
+        scenario.crew,
+        scenario.crew_duty,
+        scenario.zones,
+        scenario.adsb_tracks,
     )
     uri, user, password = neo4j_settings()
     await sync_neo4j(
@@ -83,6 +104,10 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         scenario.stocks,
         scenario.cells,
         scenario.bases,
+        scenario.squadrons,
+        scenario.aircraft,
+        scenario.crew,
+        scenario.zones,
     )
     pending, active, stock_keys = await seed_redis(
         redis_url(),
@@ -92,11 +117,19 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         scenario.cells,
         scenario.observations,
         scenario.bases,
+        scenario.aircraft,
+        scenario.crew,
+        scenario.zones,
+        scenario.adsb_tracks,
     )
     events = await publish_missions(kafka_bootstrap(), scenario.missions)
     events += await publish_threats(kafka_bootstrap(), scenario.threats)
     events += await publish_stocks(kafka_bootstrap(), scenario.stocks)
     events += await publish_weather(kafka_bootstrap(), scenario.cells, scenario.observations)
+    events += await publish_aircraft(kafka_bootstrap(), scenario.aircraft)
+    events += await publish_crew(kafka_bootstrap(), scenario.crew)
+    events += await publish_airspace(kafka_bootstrap(), scenario.zones)
+    events += await publish_adsb(kafka_bootstrap(), scenario.adsb_tracks)
     terrain = scenario.terrain
     grid = build_terrain(
         BoundingBox(
@@ -129,4 +162,8 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         features=len(scenario.features),
         borders=len(scenario.borders),
         distances=len(scenario.distances),
+        aircraft=len(scenario.aircraft),
+        crew=len(scenario.crew),
+        zones=len(scenario.zones),
+        adsb_tracks=len(scenario.adsb_tracks),
     )

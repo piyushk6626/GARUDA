@@ -40,7 +40,7 @@ Active-zone cache in Redis: `airspace:active` (set of zone_ids) refreshed each m
 SELECT zone_id FROM airspace_zone
 WHERE ST_Intersects(geometry, ST_SetSRID(ST_GeomFromGeoJSON(:route),4326))
   AND :alt_ft BETWEEN floor_ft AND ceiling_ft
-  AND (active_from IS NULL OR :t BETWEEN active_from AND active_to);
+  AND (active_from IS NULL OR (:t >= active_from AND :t < active_to));
 ```
 
 ## Consumers

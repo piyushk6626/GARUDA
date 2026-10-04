@@ -26,7 +26,9 @@ def main(argv: list[str] | None = None) -> None:
             f"cells={len(scenario.cells)} observations={len(scenario.observations)} "
             f"bases={len(scenario.bases)} features={len(scenario.features)} "
             f"borders={len(scenario.borders)} distances={len(scenario.distances)} "
-            f"terrain={scenario.terrain.rows}x{scenario.terrain.cols}"
+            f"terrain={scenario.terrain.rows}x{scenario.terrain.cols} "
+            f"aircraft={len(scenario.aircraft)} crew={len(scenario.crew)} "
+            f"zones={len(scenario.zones)} adsb={len(scenario.adsb_tracks)}"
         )
         return
 
@@ -39,7 +41,9 @@ def main(argv: list[str] | None = None) -> None:
         f"weapons={result.weapons} stocks={result.stocks} loads={result.load_configs} "
         f"cells={result.cells} observations={result.observations} "
         f"bases={result.bases} features={result.features} "
-        f"borders={result.borders} distances={result.distances}"
+        f"borders={result.borders} distances={result.distances} "
+        f"aircraft={result.aircraft} crew={result.crew} "
+        f"zones={result.zones} adsb={result.adsb_tracks}"
     )
 
 

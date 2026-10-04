@@ -1,1 +1,0 @@
-"""GARUDA application packages."""

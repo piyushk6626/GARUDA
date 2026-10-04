@@ -3,6 +3,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from garuda.schemas.adsb import AdsbTrack
+from garuda.schemas.aircraft import Aircraft, AircraftHistory, AircraftTypeSpec, Squadron
+from garuda.schemas.airspace import AirspaceZone
+from garuda.schemas.crew import Crew, CrewDutyLog
 from garuda.schemas.gis import BaseRecord, BaseTargetDistance, BorderFeature, GeoFeature, TerrainMeta
 from garuda.schemas.threat import Threat, ThreatTrack
 from garuda.schemas.weapon import Compatibility, LoadConfig, WeaponStock, WeaponType
@@ -89,3 +93,11 @@ class GeneratedScenario(BaseModel):
     borders: list[BorderFeature]
     distances: list[BaseTargetDistance]
     terrain: TerrainMeta
+    aircraft_types: list[AircraftTypeSpec]
+    squadrons: list[Squadron]
+    aircraft: list[Aircraft]
+    aircraft_history: list[AircraftHistory]
+    crew: list[Crew]
+    crew_duty: list[CrewDutyLog]
+    zones: list[AirspaceZone]
+    adsb_tracks: list[AdsbTrack]

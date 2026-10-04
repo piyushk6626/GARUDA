@@ -16,8 +16,8 @@ Synthetic (no real personnel data; use Faker with Indian-name locale `en_IN`, or
 | qualifications | jsonb | | `{type: [roles]}`, e.g. `{"Su-30MKI":["BVR","AG"]}` |
 | currency | jsonb | | last-flown dates per qualification, night, AAR |
 | flight_hours_total / last_30d | real | h | |
-| duty_hours_24h | real | h | max 14 |
-| rest_hours_since_last_duty | real | h | min 12 |
+| duty_hours_24h | real | h | dispatch limit 14; stored overload may reach 24 |
+| rest_hours_since_last_duty | real | h | 0 while on duty, otherwise at least 12 |
 | fatigue_score | real | 0-1 | from fatigue model |
 | medical_status | text | | FIT / LIMITED / GROUNDED |
 | leave_until | timestamptz | | nullable |

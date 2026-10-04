@@ -1,1 +1,0 @@
-"""Logical-clock aircraft simulation."""

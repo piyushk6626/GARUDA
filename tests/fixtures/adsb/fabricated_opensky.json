@@ -1,8 +1,0 @@
-{
-  "time": 1704067200,
-  "states": [
-    ["abc123", "SIM001  ", "FABRICATED", 1704067200, 1704067201, 73.0000, 26.3000, 9000.0, false, 230.0, 90.0, 0.0, null, 9050.0, null, false, 0],
-    ["def456", null, "FABRICATED", 1704067200, 1704067201, 73.1000, 26.3500, null, false, null, null, null, null, null, null, false, 0]
-  ],
-  "notice": "FABRICATED fixture for GARUDA offline testing; not a real OpenSky observation."
-}

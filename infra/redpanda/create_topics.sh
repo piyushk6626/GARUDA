@@ -23,3 +23,7 @@ create_topic garuda.plan.event
 create_topic garuda.threat.update
 create_topic garuda.weapons.stock
 create_topic garuda.weather.update
+create_topic garuda.aircraft.status
+create_topic garuda.crew.status
+create_topic garuda.airspace.activation
+create_topic garuda.adsb.positions

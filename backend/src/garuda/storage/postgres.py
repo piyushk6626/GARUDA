@@ -2,6 +2,10 @@ import json
 
 import asyncpg
 
+from garuda.schemas.adsb import AdsbTrack
+from garuda.schemas.aircraft import Aircraft, AircraftHistory, AircraftTypeSpec, Squadron
+from garuda.schemas.airspace import AirspaceZone
+from garuda.schemas.crew import Crew, CrewDutyLog
 from garuda.schemas.gis import BaseRecord, BaseTargetDistance, BorderFeature, GeoFeature
 from garuda.schemas.mission import Mission, Target
 from garuda.schemas.threat import Threat, ThreatTrack
@@ -31,13 +35,23 @@ async def seed_postgres(
     features: list[GeoFeature],
     borders: list[BorderFeature],
     distances: list[BaseTargetDistance],
+    aircraft_types: list[AircraftTypeSpec],
+    squadrons: list[Squadron],
+    aircraft: list[Aircraft],
+    aircraft_history: list[AircraftHistory],
+    crew: list[Crew],
+    crew_duty: list[CrewDutyLog],
+    zones: list[AirspaceZone],
+    adsb_tracks: list[AdsbTrack],
 ) -> None:
     connection = await asyncpg.connect(asyncpg_dsn(dsn))
     try:
         async with connection.transaction():
             await connection.execute(
                 """
-                TRUNCATE base_target_distance, plan_assignment, plan, mission, target,
+                TRUNCATE adsb_track, crew_duty_log, crew, aircraft_status_history, aircraft,
+                         squadron, aircraft_type, airspace_zone,
+                         base_target_distance, plan_assignment, plan, mission, target,
                          threat_track, threat, weapon_stock, weapon_compatibility,
                          load_config, weapon_type, geo_feature, border, base
                 """
@@ -57,6 +71,14 @@ async def seed_postgres(
             await _insert_load_configs(connection, load_configs)
             await _insert_compatibilities(connection, compatibilities)
             await _upsert_weather(connection, cells, observations)
+            await _insert_aircraft_types(connection, aircraft_types)
+            await _insert_squadrons(connection, squadrons)
+            await _insert_aircraft(connection, aircraft)
+            await _insert_aircraft_history(connection, aircraft_history)
+            await _insert_crew(connection, crew)
+            await _insert_crew_duty(connection, crew_duty)
+            await _insert_zones(connection, zones)
+            await _insert_adsb(connection, adsb_tracks)
     finally:
         await connection.close()
 
@@ -459,6 +481,251 @@ async def _upsert_weather(
                 for obs in observations
             ],
         )
+
+
+async def _insert_aircraft_types(
+    connection: asyncpg.Connection,
+    aircraft_types: list[AircraftTypeSpec],
+) -> None:
+    if not aircraft_types:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO aircraft_type (
+            type, fuel_capacity_kg, inspection_cycle_hours, turnaround_min,
+            range_km, cruise_kts, ceiling_ft, capabilities
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        """,
+        [
+            (
+                spec.type,
+                spec.fuel_capacity_kg,
+                spec.inspection_cycle_hours,
+                spec.turnaround_min,
+                spec.range_km,
+                spec.cruise_kts,
+                spec.ceiling_ft,
+                spec.capabilities,
+            )
+            for spec in aircraft_types
+        ],
+    )
+
+
+async def _insert_squadrons(connection: asyncpg.Connection, squadrons: list[Squadron]) -> None:
+    if not squadrons:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO squadron (sqn_id, type, home_base_id, name)
+        VALUES ($1, $2, $3, $4)
+        """,
+        [
+            (squadron.sqn_id, squadron.type, squadron.home_base_id, squadron.name)
+            for squadron in squadrons
+        ],
+    )
+
+
+async def _insert_aircraft(connection: asyncpg.Connection, aircraft: list[Aircraft]) -> None:
+    if not aircraft:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO aircraft (
+            tail_no, type, sqn_id, base_id, status, status_reason, fuel_kg, fuel_capacity_kg,
+            flight_hours_total, hours_to_next_inspection, inspection_cycle_hours,
+            maint_return_eta, turnaround_min, capabilities, range_km, cruise_kts,
+            ceiling_ft, updated_at
+        )
+        VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8,
+            $9, $10, $11,
+            $12, $13, $14, $15, $16,
+            $17, $18
+        )
+        """,
+        [
+            (
+                airframe.tail_no,
+                airframe.type,
+                airframe.sqn_id,
+                airframe.base_id,
+                airframe.status,
+                airframe.status_reason,
+                airframe.fuel_kg,
+                airframe.fuel_capacity_kg,
+                airframe.flight_hours_total,
+                airframe.hours_to_next_inspection,
+                airframe.inspection_cycle_hours,
+                airframe.maint_return_eta,
+                airframe.turnaround_min,
+                airframe.capabilities,
+                airframe.range_km,
+                airframe.cruise_kts,
+                airframe.ceiling_ft,
+                airframe.updated_at,
+            )
+            for airframe in aircraft
+        ],
+    )
+
+
+async def _insert_aircraft_history(
+    connection: asyncpg.Connection,
+    history: list[AircraftHistory],
+) -> None:
+    if not history:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO aircraft_status_history (
+            time, tail_no, status, base_id, fuel_kg, flight_hours_total, hours_to_next_inspection
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        """,
+        [
+            (
+                row.time,
+                row.tail_no,
+                row.status,
+                row.base_id,
+                row.fuel_kg,
+                row.flight_hours_total,
+                row.hours_to_next_inspection,
+            )
+            for row in history
+        ],
+    )
+
+
+async def _insert_crew(connection: asyncpg.Connection, crew: list[Crew]) -> None:
+    if not crew:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO crew (
+            crew_id, callsign, role, sqn_id, base_id, primary_type, qualifications, currency,
+            flight_hours_total, flight_hours_last_30d, duty_hours_24h, rest_hours_since_last_duty,
+            fatigue_score, medical_status, leave_until, current_assignment, is_flight_lead, updated_at
+        )
+        VALUES (
+            $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb,
+            $9, $10, $11, $12,
+            $13, $14, $15, $16, $17, $18
+        )
+        """,
+        [
+            (
+                member.crew_id,
+                member.callsign,
+                member.role,
+                member.sqn_id,
+                member.base_id,
+                member.primary_type,
+                json.dumps(member.qualifications),
+                json.dumps(member.currency.model_dump(mode="json")),
+                member.flight_hours_total,
+                member.flight_hours_last_30d,
+                member.duty_hours_24h,
+                member.rest_hours_since_last_duty,
+                member.fatigue_score,
+                member.medical_status,
+                member.leave_until,
+                member.current_assignment,
+                member.is_flight_lead,
+                member.updated_at,
+            )
+            for member in crew
+        ],
+    )
+
+
+async def _insert_crew_duty(connection: asyncpg.Connection, duty: list[CrewDutyLog]) -> None:
+    if not duty:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO crew_duty_log (time, crew_id, duty_hours_24h, fatigue_score)
+        VALUES ($1, $2, $3, $4)
+        """,
+        [(row.time, row.crew_id, row.duty_hours_24h, row.fatigue_score) for row in duty],
+    )
+
+
+async def _insert_zones(connection: asyncpg.Connection, zones: list[AirspaceZone]) -> None:
+    if not zones:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO airspace_zone (
+            zone_id, name, type, geometry, floor_ft, ceiling_ft, active_from, active_to,
+            controlling_authority, source, capacity_per_hour, width_km, mission_id
+        )
+        VALUES (
+            $1, $2, $3, ST_GeomFromText($4, 4326), $5, $6, $7, $8,
+            $9, $10, $11, $12, $13
+        )
+        """,
+        [
+            (
+                zone.zone_id,
+                zone.name,
+                zone.type,
+                zone.wkt,
+                zone.floor_ft,
+                zone.ceiling_ft,
+                zone.active_from,
+                zone.active_to,
+                zone.controlling_authority,
+                zone.source,
+                zone.capacity_per_hour,
+                zone.width_km,
+                zone.mission_id,
+            )
+            for zone in zones
+        ],
+    )
+
+
+async def _insert_adsb(connection: asyncpg.Connection, tracks: list[AdsbTrack]) -> None:
+    if not tracks:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO adsb_track (
+            time, source_id, icao24, callsign, origin_country, last_contact,
+            lat, lon, geom, alt_m, geo_alt_m, speed_ms, heading, vrate,
+            on_ground, position_source
+        )
+        VALUES (
+            $1, $2, $3, $4, $5, $6,
+            $7, $8, ST_SetSRID(ST_MakePoint($8, $7), 4326), $9, $10, $11, $12, $13,
+            $14, $15
+        )
+        """,
+        [
+            (
+                track.time,
+                track.source_id,
+                track.icao24,
+                track.callsign,
+                track.origin_country,
+                track.last_contact,
+                track.lat,
+                track.lon,
+                track.alt_m,
+                track.geo_alt_m,
+                track.speed_ms,
+                track.heading,
+                track.vrate,
+                track.on_ground,
+                track.position_source,
+            )
+            for track in tracks
+        ],
+    )
 
 
 async def _insert_compatibilities(

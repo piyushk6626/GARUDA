@@ -1,1 +1,0 @@
-"""Rebuildable projection reconciliation."""

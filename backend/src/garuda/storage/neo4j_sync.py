@@ -2,6 +2,9 @@ from neo4j import AsyncGraphDatabase
 
 from garuda.bases import BASES
 from garuda.generators.weather import cells_for_bases
+from garuda.schemas.aircraft import Aircraft, Squadron
+from garuda.schemas.airspace import AirspaceZone
+from garuda.schemas.crew import Crew
 from garuda.schemas.gis import BaseRecord
 from garuda.schemas.mission import Mission, Target
 from garuda.schemas.threat import Threat
@@ -11,6 +14,7 @@ from garuda.schemas.weather import WeatherCell
 _CLEAR = """
 MATCH (n)
 WHERE n:Mission OR n:Target OR n:Threat OR n:WeaponStock OR n:WeaponType OR n:Base
+   OR n:Aircraft OR n:Squadron OR n:Crew OR n:AircraftType OR n:AirspaceZone
 DETACH DELETE n
 """
 
@@ -128,6 +132,64 @@ MATCH (b:Base {base_id: row.base_id})
 MERGE (w)-[:AFFECTS]->(b)
 """
 
+_SQUADRONS = """
+UNWIND $rows AS row
+MERGE (s:Squadron {sqn_id: row.sqn_id})
+SET s.type = row.type,
+    s.name = row.name,
+    s.home_base_id = row.home_base_id
+WITH s, row
+MATCH (b:Base {base_id: row.home_base_id})
+MERGE (s)-[:BASED_AT]->(b)
+"""
+
+_AIRCRAFT = """
+UNWIND $rows AS row
+MERGE (a:Aircraft {tail_no: row.tail_no})
+SET a.type = row.type,
+    a.status = row.status,
+    a.base_id = row.base_id,
+    a.fuel_kg = row.fuel_kg
+WITH a, row
+MATCH (s:Squadron {sqn_id: row.sqn_id})
+MATCH (b:Base {base_id: row.base_id})
+MERGE (a)-[:ASSIGNED_TO]->(s)
+MERGE (a)-[:LOCATED_AT]->(b)
+"""
+
+_CREW = """
+UNWIND $rows AS row
+MERGE (c:Crew {crew_id: row.crew_id})
+SET c.role = row.role,
+    c.callsign = row.callsign,
+    c.base_id = row.base_id,
+    c.fatigue_score = row.fatigue_score
+WITH c, row
+MATCH (s:Squadron {sqn_id: row.sqn_id})
+MATCH (b:Base {base_id: row.base_id})
+MERGE (c)-[:MEMBER_OF]->(s)
+MERGE (c)-[:LOCATED_AT]->(b)
+"""
+
+_QUALIFIED = """
+UNWIND $rows AS row
+MATCH (c:Crew {crew_id: row.crew_id})
+MERGE (t:AircraftType {type: row.type})
+MERGE (c)-[q:QUALIFIED_ON]->(t)
+SET q.qualifications = row.qualifications
+"""
+
+_AIRSPACE = """
+UNWIND $rows AS row
+MERGE (z:AirspaceZone {zone_id: row.zone_id})
+SET z.name = row.name,
+    z.type = row.type,
+    z.mission_id = row.mission_id
+WITH z, row
+MATCH (m:Mission {mission_id: row.mission_id})
+MERGE (m)-[:USES_AIRSPACE]->(z)
+"""
+
 
 async def sync_neo4j(
     uri: str,
@@ -140,6 +202,10 @@ async def sync_neo4j(
     stocks: list[WeaponStock],
     cells: list[WeatherCell],
     bases: list[BaseRecord],
+    squadrons: list[Squadron],
+    aircraft: list[Aircraft],
+    crew: list[Crew],
+    zones: list[AirspaceZone],
 ) -> None:
     driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
     try:
@@ -154,6 +220,11 @@ async def sync_neo4j(
                 _stock_rows(stocks),
                 _base_rows(bases),
                 _weather_rows(cells),
+                _squadron_rows(squadrons),
+                _aircraft_rows(aircraft),
+                _crew_rows(crew),
+                _qualification_rows(crew),
+                _airspace_rows(zones),
             )
     finally:
         await driver.close()
@@ -169,6 +240,11 @@ async def _write_graph(
     stock_rows: list[dict],
     base_rows: list[dict],
     weather_rows: list[dict],
+    squadron_rows: list[dict],
+    aircraft_rows: list[dict],
+    crew_rows: list[dict],
+    qualification_rows: list[dict],
+    airspace_rows: list[dict],
 ) -> None:
     await _consume(tx, _CLEAR)
     await _consume(tx, _TARGETS, rows=target_rows)
@@ -184,6 +260,16 @@ async def _write_graph(
     if stock_rows:
         await _consume(tx, _STOCKS, rows=stock_rows)
     await _write_weather(tx, base_rows, weather_rows)
+    if squadron_rows:
+        await _consume(tx, _SQUADRONS, rows=squadron_rows)
+    if aircraft_rows:
+        await _consume(tx, _AIRCRAFT, rows=aircraft_rows)
+    if crew_rows:
+        await _consume(tx, _CREW, rows=crew_rows)
+    if qualification_rows:
+        await _consume(tx, _QUALIFIED, rows=qualification_rows)
+    if airspace_rows:
+        await _consume(tx, _AIRSPACE, rows=airspace_rows)
 
 
 async def sync_weather_graph(
@@ -348,6 +434,71 @@ def _weather_rows(cells: list[WeatherCell]) -> list[dict]:
             "source": cell.source,
         }
         for airfield, cell in cells_for_bases(cells)
+    ]
+
+
+def _squadron_rows(squadrons: list[Squadron]) -> list[dict]:
+    return [
+        {
+            "sqn_id": squadron.sqn_id,
+            "type": squadron.type,
+            "name": squadron.name,
+            "home_base_id": squadron.home_base_id,
+        }
+        for squadron in squadrons
+    ]
+
+
+def _aircraft_rows(aircraft: list[Aircraft]) -> list[dict]:
+    return [
+        {
+            "tail_no": airframe.tail_no,
+            "type": airframe.type,
+            "status": airframe.status,
+            "base_id": airframe.base_id,
+            "sqn_id": airframe.sqn_id,
+            "fuel_kg": airframe.fuel_kg,
+        }
+        for airframe in aircraft
+    ]
+
+
+def _crew_rows(crew: list[Crew]) -> list[dict]:
+    return [
+        {
+            "crew_id": member.crew_id,
+            "role": member.role,
+            "callsign": member.callsign,
+            "base_id": member.base_id,
+            "sqn_id": member.sqn_id,
+            "fatigue_score": member.fatigue_score,
+        }
+        for member in crew
+    ]
+
+
+def _qualification_rows(crew: list[Crew]) -> list[dict]:
+    return [
+        {
+            "crew_id": member.crew_id,
+            "type": aircraft_type,
+            "qualifications": qualifications,
+        }
+        for member in crew
+        for aircraft_type, qualifications in sorted(member.qualifications.items())
+    ]
+
+
+def _airspace_rows(zones: list[AirspaceZone]) -> list[dict]:
+    return [
+        {
+            "zone_id": zone.zone_id,
+            "name": zone.name,
+            "type": zone.type,
+            "mission_id": zone.mission_id,
+        }
+        for zone in zones
+        if zone.mission_id is not None
     ]
 
 

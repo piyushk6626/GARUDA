@@ -6,3 +6,8 @@ CREATE CONSTRAINT weapon_type_pk IF NOT EXISTS FOR (w:WeaponType) REQUIRE w.weap
 CREATE CONSTRAINT weapon_stock_pk IF NOT EXISTS FOR (s:WeaponStock) REQUIRE s.stock_id IS UNIQUE;
 CREATE CONSTRAINT base_pk IF NOT EXISTS FOR (b:Base) REQUIRE b.base_id IS UNIQUE;
 CREATE CONSTRAINT weather_cell_pk IF NOT EXISTS FOR (w:WeatherCell) REQUIRE w.cell_id IS UNIQUE;
+CREATE CONSTRAINT aircraft_pk IF NOT EXISTS FOR (a:Aircraft) REQUIRE a.tail_no IS UNIQUE;
+CREATE CONSTRAINT squadron_pk IF NOT EXISTS FOR (s:Squadron) REQUIRE s.sqn_id IS UNIQUE;
+CREATE CONSTRAINT aircraft_type_pk IF NOT EXISTS FOR (t:AircraftType) REQUIRE t.type IS UNIQUE;
+CREATE CONSTRAINT crew_pk IF NOT EXISTS FOR (c:Crew) REQUIRE c.crew_id IS UNIQUE;
+CREATE CONSTRAINT airspace_zone_pk IF NOT EXISTS FOR (z:AirspaceZone) REQUIRE z.zone_id IS UNIQUE;

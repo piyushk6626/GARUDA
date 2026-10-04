@@ -13,6 +13,10 @@ from faker import Faker
 from shapely.geometry import Polygon
 
 from garuda.config import ScenarioConfig
+from garuda.generators.adsb import build_adsb
+from garuda.generators.aircraft import build_aircraft
+from garuda.generators.airspace import build_airspace
+from garuda.generators.crew import build_crew
 from garuda.generators.gis import build_gis
 from garuda.generators.targets import build_targets
 from garuda.generators.threats import build_threats, suppress_sead_site
@@ -89,6 +93,10 @@ def build_scenario(config: ScenarioConfig, seed: int) -> GeneratedScenario:
     missions = _build_missions(config, seed, rng, targets)
     suppress_sead_site(threats, missions, targets)
     cells, observations = build_weather(config, rng)
+    aircraft_types, squadrons, aircraft, aircraft_history = build_aircraft(config, seed)
+    crew, crew_duty = build_crew(config, seed, aircraft, squadrons)
+    zones = build_airspace(config, seed, missions)
+    adsb_tracks = build_adsb(config, seed)
     return GeneratedScenario(
         seed=seed,
         targets=targets,
@@ -106,6 +114,14 @@ def build_scenario(config: ScenarioConfig, seed: int) -> GeneratedScenario:
         borders=borders,
         distances=distances,
         terrain=terrain,
+        aircraft_types=aircraft_types,
+        squadrons=squadrons,
+        aircraft=aircraft,
+        aircraft_history=aircraft_history,
+        crew=crew,
+        crew_duty=crew_duty,
+        zones=zones,
+        adsb_tracks=adsb_tracks,
     )
 
 
