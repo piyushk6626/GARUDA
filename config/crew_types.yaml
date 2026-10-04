@@ -1,0 +1,14 @@
+# Fictional planning catalog; values are deliberately not real operational policy.
+qualification_window_days: 90
+night_window_days: 90
+aar_window_days: 180
+types:
+  Su-30MKI: {staffing: {PILOT: 1, WSO: 1}, qualifications: [BVR, AG], secondary_types: [Rafale, Tejas], night_capable: true, aar_capable: true}
+  Rafale: {staffing: {PILOT: 2}, qualifications: [BVR, AG], secondary_types: [Su-30MKI, Tejas], night_capable: true, aar_capable: true}
+  Tejas: {staffing: {PILOT: 2}, qualifications: [BVR, AG], secondary_types: [Rafale, Su-30MKI], night_capable: true, aar_capable: false}
+  Mirage-2000: {staffing: {PILOT: 2}, qualifications: [BVR, AG], secondary_types: [Jaguar], night_capable: true, aar_capable: false}
+  Jaguar: {staffing: {PILOT: 2}, qualifications: [AG, STRIKE], secondary_types: [Mirage-2000], night_capable: true, aar_capable: false}
+  C-130J: {staffing: {PILOT: 1, LOADMASTER: 1}, qualifications: [AIRLIFT], secondary_types: [], night_capable: true, aar_capable: false}
+  IL-78: {staffing: {PILOT: 2}, qualifications: [AAR], secondary_types: [], night_capable: true, aar_capable: true}
+  AEW&C: {staffing: {PILOT: 1, AEW_OP: 1}, qualifications: [AEW, ISR], secondary_types: [], night_capable: true, aar_capable: false}
+  helicopter: {staffing: {PILOT: 2}, qualifications: [CAS, SAR], secondary_types: [], night_capable: true, aar_capable: false}

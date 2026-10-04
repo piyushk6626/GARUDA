@@ -18,18 +18,23 @@ dependencies = [
   "redis==6.4.0",
   "simpy==4.1.1",
   "sqlalchemy==2.0.43",
+  "pyproj==3.7.2",
+  "shapely==2.1.2",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest==8.4.2", "pytest-asyncio==1.2.0"]
+dev = ["pytest==8.4.2", "pytest-asyncio==1.2.0", "confluent-kafka==2.11.1"]
 
 [project.scripts]
 garuda-adsb = "backend.app.cli:main"
 garuda-aircraft = "backend.app.aircraft_cli:main"
+garuda-airspace = "backend.app.airspace_cli:main"
+garuda-crew = "backend.app.crew_cli:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["integration: requires the isolated Docker airspace services"]
 
 [tool.ruff]
 line-length = 100

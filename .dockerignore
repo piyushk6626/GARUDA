@@ -14,6 +14,8 @@
 !tests/integration/test_adsb_stores.py
 !tests/integration/test_adsb_application_e2e.py
 !tests/integration/test_aircraft_stores.py
+!tests/integration/test_airspace_stores.py
+!tests/integration/test_crew_stores.py
 !tests/fixtures/
 !tests/fixtures/**
 !config/
