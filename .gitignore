@@ -227,3 +227,8 @@ __marimo__/
 
 # Generated visualization page
 data/viz/
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.env

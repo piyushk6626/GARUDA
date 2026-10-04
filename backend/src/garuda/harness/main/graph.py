@@ -33,7 +33,7 @@ from garuda.harness.main.schemas import (
     WorkPlanDraft,
     plan_problem,
 )
-from garuda.harness.main.session import MainSession
+from garuda.harness.main.session import MainSession, OnEvent
 from garuda.harness.main.tools import (
     ABORT,
     AGENT_TERMINALS,
@@ -85,6 +85,7 @@ async def run_main(
     mode: Literal["auto", "agent", "plan"] = "auto",
     model: Any | None = None,
     sub_agents: dict[str, Delegate] | None = None,
+    on_event: OnEvent | None = None,
 ) -> MainResult:
     """Handle one commander request. ``mode`` other than auto skips the router."""
     if model is None:
@@ -92,7 +93,7 @@ async def run_main(
 
         model = chat_model()
     agents = default_agents() if sub_agents is None else sub_agents
-    session = MainSession(query, model=model, agents=agents)
+    session = MainSession(query, model=model, agents=agents, on_event=on_event)
     if mode != "auto":
         _enter_mode(session, ctx, mode)
     return await _advance(session, ctx)
@@ -105,8 +106,11 @@ async def resume_main(
     answer: str | None = None,
     approval: PlanApproval | None = None,
     model: Any | None = None,
+    on_event: OnEvent | None = None,
 ) -> MainResult:
     """Continue a session that is waiting for an answer or for plan approval."""
+    if on_event is not None:
+        session.on_event = on_event
     if not session.open:
         raise ValueError("session is closed")
     if session.awaiting is None:
@@ -137,9 +141,16 @@ async def _advance(session: MainSession, ctx: ToolContext) -> MainResult:
         "respond": _respond,
     }
     while True:
+        await _emit(session, {"type": "phase", "phase": session.phase, "mode": session.mode})
         result = await phases[session.phase](session, ctx)
         if result is not None:
             return result
+
+
+async def _emit(session: MainSession, event: dict[str, Any]) -> None:
+    """Forward one progress event. A missing callback leaves the run unchanged."""
+    if session.on_event is not None:
+        await session.on_event(event)
 
 
 # Phases. Each returns a MainResult to pause or finish, or None to continue.
@@ -167,7 +178,7 @@ async def _agent_mode(session: MainSession, ctx: ToolContext) -> MainResult | No
         allow_ask=True,
     )
     if end.name == RESPOND:
-        return _finish(session, "answered", answer=end.args["answer"])
+        return await _finish(session, "answered", answer=end.args["answer"])
     if end.name == SWITCH_TO_PLAN:
         session.mode = "plan"
         session.phase = "discover"
@@ -177,8 +188,8 @@ async def _agent_mode(session: MainSession, ctx: ToolContext) -> MainResult | No
         )
         return None
     if end.name == ASK_NAME:
-        return _await_answer(session, end.args["question"])
-    return _finish(session, "blocked", answer="Agent mode ended without an answer.")
+        return await _await_answer(session, end.args["question"])
+    return await _finish(session, "blocked", answer="Agent mode ended without an answer.")
 
 
 async def _discover(session: MainSession, ctx: ToolContext) -> MainResult | None:
@@ -198,10 +209,10 @@ async def _discover(session: MainSession, ctx: ToolContext) -> MainResult | None
             version = max(version, session.proposed.version + 1)
         session.proposed = WorkPlan(goal=draft.goal, steps=draft.steps, version=version)
         session.approval_kind = "initial"
-        return _await_approval(session)
+        return await _await_approval(session)
     if end.name == ASK_NAME:
-        return _await_answer(session, end.args["question"])
-    return _finish(session, "blocked", answer="Discovery ended without a work plan.")
+        return await _await_answer(session, end.args["question"])
+    return await _finish(session, "blocked", answer="Discovery ended without a work plan.")
 
 
 async def _execute(session: MainSession, ctx: ToolContext) -> MainResult | None:
@@ -218,6 +229,10 @@ async def _execute(session: MainSession, ctx: ToolContext) -> MainResult | None:
         session.step_results = []
         session.clarify_rounds = 0
         query = build_step_query(step, session.outcomes)
+    await _emit(
+        session,
+        {"type": "step_start", "step_id": step.id, "agent": step.agent, "objective": step.objective},
+    )
     run = await delegate(session.agents, step, query, ctx, session.step_session)
     if run.result is not None:
         session.step_results.append(run.result)
@@ -225,8 +240,10 @@ async def _execute(session: MainSession, ctx: ToolContext) -> MainResult | None:
         session.clarify_rounds += 1
         session.step_question = run.question
         session.phase = "clarify"
+        await _emit(session, {"type": "step_end", "step_id": step.id, "agent": step.agent, "status": "clarifying"})
         return None
     status = "blocked" if run.question else run.status
+    await _emit(session, {"type": "step_end", "step_id": step.id, "agent": step.agent, "status": status})
     session.outcomes.append(
         StepOutcome(
             step_id=step.id,
@@ -262,7 +279,7 @@ async def _clarify(session: MainSession, ctx: ToolContext) -> MainResult | None:
         session.phase = "execute"
         return None
     question = end.args.get("question") if end.name == ASK_HUMAN else None
-    return _await_answer(session, question or session.step_question or "The sub-agent needs more context.")
+    return await _await_answer(session, question or session.step_question or "The sub-agent needs more context.")
 
 
 async def _review(session: MainSession, ctx: ToolContext) -> MainResult | None:
@@ -297,7 +314,7 @@ async def _review(session: MainSession, ctx: ToolContext) -> MainResult | None:
         session.phase = "execute"
         return None
     if end.name == REVISE_PLAN:
-        return _apply_revision(session, RevisePlanInput.model_validate(end.args))
+        return await _apply_revision(session, RevisePlanInput.model_validate(end.args))
     if end.name == RETRY_STEP:
         retry = RetryStepInput.model_validate(end.args)
         session.retries[step.id] = session.retries.get(step.id, 0) + 1
@@ -320,8 +337,8 @@ async def _respond(session: MainSession, ctx: ToolContext) -> MainResult | None:
     ]
     end = await _tool_loop(session, ctx, messages, RESPOND_TERMINALS, max_turns=DECISION_TURNS)
     if end.name != RESPOND:
-        return _finish(session, "blocked", answer="The final answer could not be written; see the outcomes.")
-    return _finish(session, "answered", answer=end.args["answer"])
+        return await _finish(session, "blocked", answer="The final answer could not be written; see the outcomes.")
+    return await _finish(session, "answered", answer=end.args["answer"])
 
 
 # Tool loop shared by every phase.
@@ -368,7 +385,9 @@ async def _tool_loop(
                     replies.append(_reply(call, {"ok": False, "error": "tool budget spent"}))
                     continue
                 budget -= 1
+                await _emit(session, {"type": "tool_start", "name": name, "args": call["args"]})
                 record = await _run_query_agent(session, ctx, name, call["args"])
+                await _emit(session, {"type": "tool_end", "name": name, "ok": record.ok, "error": record.error})
                 replies.append(_reply(call, _record_content(record)))
                 continue
             if name in terminals:
@@ -487,7 +506,7 @@ def _replace_steps(session: MainSession, updates: dict[str, PlanStep]) -> None:
     session.plan = plan.model_copy(update={"steps": steps})
 
 
-def _apply_revision(session: MainSession, decision: RevisePlanInput) -> MainResult | None:
+async def _apply_revision(session: MainSession, decision: RevisePlanInput) -> MainResult | None:
     plan = _plan(session)
     done = plan.steps[: session.step_index + 1]
     old_remaining = plan.steps[session.step_index + 1 :]
@@ -495,7 +514,7 @@ def _apply_revision(session: MainSession, decision: RevisePlanInput) -> MainResu
     if is_material(old_remaining, decision.remaining_steps):
         session.proposed = revised
         session.approval_kind = "revision"
-        return _await_approval(session)
+        return await _await_approval(session)
     session.plan_history.append(plan)
     session.plan = revised
     session.step_index += 1
@@ -587,19 +606,30 @@ def _situation(session: MainSession, **extra: Any) -> str:
 # Results.
 
 
-def _await_answer(session: MainSession, question: str) -> MainResult:
+async def _await_answer(session: MainSession, question: str) -> MainResult:
     session.awaiting = "answer"
+    await _emit(session, {"type": "question", "question": question, "phase": session.phase})
     return _result(session, "awaiting_answer", question=question)
 
 
-def _await_approval(session: MainSession) -> MainResult:
+async def _await_approval(session: MainSession) -> MainResult:
     session.awaiting = "approval"
     session.phase = "approve"
-    return _result(session, "awaiting_approval", plan=session.proposed)
+    proposed = session.proposed
+    await _emit(
+        session,
+        {
+            "type": "plan_proposed",
+            "kind": session.approval_kind,
+            "plan": proposed.model_dump(mode="json") if proposed is not None else None,
+        },
+    )
+    return _result(session, "awaiting_approval", plan=proposed)
 
 
-def _finish(session: MainSession, status: MainStatus, *, answer: str) -> MainResult:
+async def _finish(session: MainSession, status: MainStatus, *, answer: str) -> MainResult:
     result = _result(session, status, answer=answer)
+    await _emit(session, {"type": "final", "status": status, "mode": session.mode, "answer": answer})
     session.close()
     return result
 

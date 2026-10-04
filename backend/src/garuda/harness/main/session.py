@@ -4,6 +4,7 @@ There is no checkpointer. A run that waits for a human returns this object, and 
 caller passes it back to ``resume_main``. close() drops every open sub-agent session.
 """
 
+from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
 from langchain_core.messages import AnyMessage
@@ -15,10 +16,18 @@ from garuda.harness.retrieval.session import RetrievalSession
 Phase = Literal["route", "agent", "discover", "approve", "execute", "clarify", "review", "respond", "closed"]
 Awaiting = Literal["answer", "approval"]
 ApprovalKind = Literal["initial", "revision"]
+OnEvent = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class MainSession:
-    def __init__(self, query: str, *, model: Any, agents: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        query: str,
+        *,
+        model: Any,
+        agents: dict[str, Any],
+        on_event: OnEvent | None = None,
+    ) -> None:
         self.query = query
         self.model = model
         self.agents = agents
@@ -44,6 +53,7 @@ class MainSession:
         self.abort_reason = ""
         self.turn_calls: list[ToolCallRecord] = []
         self.open = True
+        self.on_event = on_event
 
     def close(self) -> None:
         for child in self.children.values():

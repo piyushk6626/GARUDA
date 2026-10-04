@@ -446,3 +446,65 @@ def test_rejected_initial_plan_feedback_is_a_human_message():
     assert again.plan.version == 2
     assert isinstance(model.seen[1][-1], HumanMessage)
     assert "fewer" in model.seen[1][-1].content
+
+
+def test_on_event_reports_phases_tools_and_the_answer():
+    events = []
+
+    async def on_event(event):
+        events.append(event)
+
+    async def retrieval(query, ctx, session=None, **kwargs):
+        return RetrievalResult(
+            query=query,
+            calls=[ToolCallRecord(name="get_aircraft_availability", args={}, ok=True, data={"items": ["SU-A0123"]})],
+        )
+
+    model = ScriptedModel(
+        [
+            _call(ASK_RETRIEVAL, {"query": "FMC Su-30s"}, "r1"),
+            _call("respond", {"answer": "SU-A0123 is FMC."}),
+        ]
+    )
+
+    result = asyncio.run(
+        run_main("Which Su-30s are FMC?", _ctx(), mode="agent", model=model, sub_agents=_agents(retrieval=retrieval), on_event=on_event)
+    )
+
+    assert result.status == "answered"
+    assert [event["type"] for event in events] == ["phase", "tool_start", "tool_end", "final"]
+    assert events[0]["phase"] == "agent"
+    assert events[1]["name"] == ASK_RETRIEVAL
+    assert events[2]["ok"] is True
+    assert events[3]["answer"] == "SU-A0123 is FMC."
+
+
+def test_on_event_reports_a_plan_and_each_step():
+    events = []
+
+    async def on_event(event):
+        events.append(event["type"])
+
+    async def assign(query, ctx, session=None, **kwargs):
+        return _task("assign_missions", {"plan_id": "plan-7"})
+
+    model = ScriptedModel(
+        [
+            _call("propose_plan", ONE_STEP, "p1"),
+            _call("continue_plan", {"criteria_met": True}),
+            _call("respond", {"answer": "Done."}),
+        ]
+    )
+    agents = _agents(assign_missions=assign)
+
+    proposed = asyncio.run(run_main("Build", _ctx(), mode="plan", model=model, sub_agents=agents, on_event=on_event))
+
+    assert proposed.status == "awaiting_approval"
+    assert events == ["phase", "plan_proposed"]
+
+    done = asyncio.run(resume_main(proposed.session, _ctx(), approval=PlanApproval(approved=True), on_event=on_event))
+
+    assert done.status == "answered"
+    assert "step_start" in events
+    assert "step_end" in events
+    assert events[-1] == "final"

@@ -1,4 +1,4 @@
-.PHONY: up down migrate seed seed-dry viz all test
+.PHONY: up down migrate seed seed-dry viz api web all test
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 COMPOSE := docker compose
@@ -41,6 +41,12 @@ seed-dry:
 
 viz:
 	cd $(ROOT)/backend && PYTHONPATH=src $(PYTHON) -m garuda.viz --config ../config/scenario.yaml --seed $(GARUDA_SEED) --out ../data/viz/index.html
+
+api:
+	cd $(ROOT)/backend && PYTHONPATH=src $(PYTHON) -m uvicorn garuda.api.main:app --reload --port 8000
+
+web:
+	cd $(ROOT)/frontend && npm run dev
 
 all: up seed viz
 
