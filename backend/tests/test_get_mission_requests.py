@@ -216,23 +216,19 @@ def test_each_call_reads_the_current_scenario_snapshot():
     assert _ids(asyncio.run(get_mission_requests(payload, ctx))) == ["SECOND"]
 
 
-def test_retrieval_adapter_executes_the_tool_with_serialized_window():
-    from garuda.harness.retrieval.tools import run_data_call
-
+def test_tool_accepts_serialized_window_through_the_existing_input_model():
     ctx = _context([_mission("KEEP"), _mission("DROP", priority=5)])
-    record = asyncio.run(run_data_call(
-        "get_mission_requests",
+    payload = GetMissionRequestsInput.model_validate(
         {
             "status": ["REQUESTED"],
             "types": ["STRIKE"],
             "priority_max": 2,
             "window": {"start": WHEN.isoformat(), "end": (WHEN + timedelta(hours=1)).isoformat()},
-        },
-        ctx,
-    ))
+        }
+    )
+    output = asyncio.run(get_mission_requests(payload, ctx))
 
-    assert record.ok is True
-    assert record.data == {
+    assert output.model_dump() == {
         "total": 1,
         "items": [{"mission_id": "KEEP", "type": "STRIKE", "status": "REQUESTED", "priority": 2}],
     }
