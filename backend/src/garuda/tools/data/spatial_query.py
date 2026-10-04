@@ -29,7 +29,10 @@ class SpatialQueryOutput(BaseModel):
 
 SPEC = ToolSpec(
     name="spatial_query",
-    description="Distances, buffers, and intersections. Use for geometry; not for threat risk rasters.",
+    description=(
+        "Pure geometry: distance, within-radius, nearest, intersects, or buffer between two places "
+        "or entities. It does not compute threat-risk maps."
+    ),
     input_model=SpatialQueryInput,
     output_model=SpatialQueryOutput,
     side_effects="none",
