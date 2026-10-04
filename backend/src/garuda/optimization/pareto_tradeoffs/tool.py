@@ -1,5 +1,6 @@
 from garuda.contracts.tool import ToolContext, ToolSpec
-from garuda.optimization.pareto_tradeoffs.schemas import ParetoTradeoffsInput, ParetoTradeoffsOutput
+from garuda.optimization.pareto_tradeoffs.schemas import ParetoTradeoffsInput, ParetoTradeoffsOutput, PlanOption
+from garuda.tools.stubs import fixed
 
 SPEC = ToolSpec(
     name="pareto_tradeoffs",
@@ -10,10 +11,25 @@ SPEC = ToolSpec(
     timeout_s=120,
 )
 
+STUB_OUTPUT = ParetoTradeoffsOutput(
+    options=[
+        PlanOption(
+            plan_id="plan-stub",
+            label="Balanced",
+            objectives={"value": 1.0, "risk": 0.2},
+            key_differences=["skeleton"],
+        )
+    ],
+    ideal={"value": 1.0, "risk": 0.0},
+    nadir={"value": 0.0, "risk": 1.0},
+    recommendation="Balanced",
+)
+
 
 async def pareto_tradeoffs(payload: ParetoTradeoffsInput, ctx: ToolContext) -> ParetoTradeoffsOutput:
-    """TODO(phase1): build_problem -> run_cpu(solve) -> explain -> output."""
-    raise NotImplementedError
+    """Skeleton: same output for every input until the solver is wired."""
+    _ = payload, ctx
+    return fixed(STUB_OUTPUT)
 
 
 # TODO(phase1): from garuda.tools.registry import register; register(SPEC, pareto_tradeoffs)

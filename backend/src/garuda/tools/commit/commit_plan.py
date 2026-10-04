@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 
 from garuda.contracts.tool import ToolContext, ToolSpec
+from garuda.tools.stubs import fixed
 
 
 class CommitPlanInput(BaseModel):
@@ -25,5 +26,10 @@ SPEC = ToolSpec(
 )
 
 
+STUB_OUTPUT = CommitPlanOutput(plan_id="plan-stub", committed=True)
+
+
 async def commit_plan(payload: CommitPlanInput, ctx: ToolContext) -> CommitPlanOutput:
-    raise NotImplementedError
+    """Skeleton: same committed plan for every input until approval is wired."""
+    _ = payload, ctx
+    return fixed(STUB_OUTPUT)

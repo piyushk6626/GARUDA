@@ -1,11 +1,31 @@
-"""Input/output models. TODO(phase1): copy the signatures from docs/03_optimization_layer/milp_mission_aircraft_assignment.md."""
+"""Input/output models from docs/03_optimization_layer/milp_mission_aircraft_assignment.md."""
 
-from pydantic import BaseModel
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from garuda.contracts.plan import Assignment, PlanKPIs, UnassignedMission
+
+
+class ObjectiveWeights(BaseModel):
+    risk: float = 0.2
+    effect: float = 0.3
 
 
 class AssignMissionsInput(BaseModel):
-    pass
+    scenario_time: datetime
+    horizon_hours: int = 72
+    mission_ids: list[str] | None = None
+    weights: ObjectiveWeights = Field(default_factory=ObjectiveWeights)
+    locked_assignments: list[Assignment] = Field(default_factory=list)
+    time_limit_s: int = 30
 
 
 class AssignMissionsOutput(BaseModel):
-    pass
+    plan_id: str
+    status: Literal["OPTIMAL", "FEASIBLE", "INFEASIBLE"]
+    assignments: list[Assignment]
+    unassigned: list[UnassignedMission]
+    kpis: PlanKPIs
+    binding_constraints: list[str]

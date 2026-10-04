@@ -1,27 +1,41 @@
-"""Data tool `search_doctrine`. Backing: NEW queries/doctrine.py + ingest/doctrine.py. See docs/02_llm_harness/data_query_tools.md."""
+"""Data tool `search_doctrine`. Backing: NEW queries/doctrine.py + ingest/doctrine.py. See docs/02_llm_harness/retrieval_and_context.md."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from garuda.contracts.tool import ToolContext, ToolSpec
+from garuda.tools.stubs import fixed
+
+
+class Passage(BaseModel):
+    text: str
+    doc: str
+    score: float
 
 
 class SearchDoctrineInput(BaseModel):
-    pass
+    query: str
+    k: int = Field(5, ge=1, le=20)
 
 
 class SearchDoctrineOutput(BaseModel):
-    pass
+    passages: list[Passage]
 
 
 SPEC = ToolSpec(
     name="search_doctrine",
-    description="TODO(phase1): state when to use and not use.",
+    description="Search doctrine and SOP passages. Use for procedure text; not for live aircraft or plan numbers.",
     input_model=SearchDoctrineInput,
     output_model=SearchDoctrineOutput,
     side_effects="none",
     timeout_s=10,
 )
 
+STUB_OUTPUT = SearchDoctrineOutput(
+    passages=[Passage(text="Skeleton doctrine passage.", doc="sop-1", score=0.9)]
+)
+
 
 async def search_doctrine(payload: SearchDoctrineInput, ctx: ToolContext) -> SearchDoctrineOutput:
-    raise NotImplementedError
+    """Skeleton: same output for every input until retrieval is wired."""
+    _ = payload, ctx
+    return fixed(STUB_OUTPUT)
