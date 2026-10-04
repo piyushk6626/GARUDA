@@ -1,4 +1,4 @@
-"""Bind the eight data-query tools. Their functions and schemas are used as-is."""
+"""Bind the data-query tools. Their functions and schemas are used as-is."""
 
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -24,6 +24,8 @@ from garuda.tools.data.get_weapon_stock import SPEC as WEAPON_SPEC
 from garuda.tools.data.get_weapon_stock import get_weapon_stock
 from garuda.tools.data.get_weather_along_route import SPEC as WEATHER_SPEC
 from garuda.tools.data.get_weather_along_route import get_weather_along_route
+from garuda.tools.data.search_doctrine import SPEC as DOCTRINE_SPEC
+from garuda.tools.data.search_doctrine import search_doctrine
 
 FINISH_NAME = "finish"
 ASK_NAME = "ask_question"
@@ -51,6 +53,7 @@ DATA_TOOLS: tuple[tuple[ToolSpec, ToolFn], ...] = (
     (THREAT_SPEC, get_threats_in_area),
     (MISSION_SPEC, get_mission_requests),
     (TRAFFIC_SPEC, get_civil_traffic),
+    (DOCTRINE_SPEC, search_doctrine),
 )
 
 TOOLS_BY_NAME: dict[str, tuple[ToolSpec, ToolFn]] = {spec.name: (spec, fn) for spec, fn in DATA_TOOLS}

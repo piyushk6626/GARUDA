@@ -1,4 +1,4 @@
-"""Natural-language retrieval over the eight data-query tools."""
+"""Natural-language retrieval over the data-query tools."""
 
 from garuda.harness.retrieval.graph import retrieve
 from garuda.harness.retrieval.schemas import RetrievalResult, ToolCallRecord

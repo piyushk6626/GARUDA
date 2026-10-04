@@ -53,6 +53,10 @@ Available tools
    ADS-B civil tracks in an area since a given time.
    Context for keeping clear of airliners, not a threat picture.
 
+9. search_doctrine
+   Searches doctrine and standard-operating-procedure text and returns the top matching passages.
+   Procedure text only, not live aircraft or plan numbers.
+
 Control tools
 - ask_question: ask the parent agent or a human for the missing context. Then wait.
 - finish: end this session after the data tools have been called. Do not describe the results.

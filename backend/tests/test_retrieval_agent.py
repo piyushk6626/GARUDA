@@ -173,6 +173,22 @@ def test_budget_stops_before_another_model_call():
     assert result.calls[1].error == "tool budget spent"
 
 
+def test_search_doctrine_returns_passages():
+    model = ScriptedModel(
+        [
+            _calls(("search_doctrine", {"query": "tanker join procedure"}, "d1")),
+            _calls((FINISH_NAME, {}, "d2")),
+        ]
+    )
+
+    result = asyncio.run(retrieve("What does doctrine say about tanker join?", _ctx(), model=model))
+
+    assert model.invocations == 2
+    assert result.calls[0].name == "search_doctrine"
+    assert result.calls[0].ok is True
+    assert result.calls[0].data["passages"][0]["doc"] == "sop-1"
+
+
 def test_system_prompt_names_each_tool_and_the_limits():
     text = retrieval_system_prompt(WHEN)
 
