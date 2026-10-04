@@ -22,7 +22,7 @@ const LabelCtx = createContext<Stamp>(() => {});
 
 type Labeled = { layer: L.Layer; minZoom: number };
 
-export function MapView({ scenario, mapRef }: { scenario: Scenario | null; mapRef: RefObject<L.Map | null> }) {
+export function MapView({ scenario, mapRef, theme }: { scenario: Scenario | null; mapRef: RefObject<L.Map | null>; theme: "light" | "dark" }) {
   const labeled = useRef<Labeled[]>([]);
   const stamp = useMemo<Stamp>(() => (layer, text, minZoom) => {
     if (!text) return;
@@ -32,7 +32,8 @@ export function MapView({ scenario, mapRef }: { scenario: Scenario | null; mapRe
   const [base, setBase] = useState<"street" | "satellite">("street");
   const [labels, setLabels] = useState(true);
   const cartoKey = import.meta.env.VITE_CARTO_API_KEY ?? "";
-  const street = `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${cartoKey ? `?key=${encodeURIComponent(cartoKey)}` : ""}`;
+  const streetStyle = theme === "dark" ? "dark_all" : "voyager";
+  const street = `https://basemaps.cartocdn.com/rastertiles/${streetStyle}/{z}/{x}/{y}{r}.png${cartoKey ? `?key=${encodeURIComponent(cartoKey)}` : ""}`;
 
   return (
     <div className="map-stage">

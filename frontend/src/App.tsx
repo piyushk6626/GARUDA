@@ -9,7 +9,24 @@ import { MapView } from "./components/MapView";
 import { COUNT_KEYS, COUNT_LABEL } from "./format";
 import type { Scenario } from "./types";
 
+type Theme = "light" | "dark";
+
+function storedTheme(): Theme {
+  const stored = localStorage.getItem("garuda-theme");
+  if (stored === "light" || stored === "dark") return stored;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function useTheme() {
+  const [theme, setTheme] = useState<Theme>(storedTheme);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+  return { theme, setTheme };
+}
+
 export function App() {
+  const { theme, setTheme } = useTheme();
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -36,6 +53,20 @@ export function App() {
           </div>
         </div>
         {scenario ? <span className="seed">Seed {scenario.seed}</span> : <span className="seed">Loading</span>}
+        <button
+          type="button"
+          className="theme-toggle"
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          onClick={() => {
+            setTheme((current) => {
+              const next = current === "dark" ? "light" : "dark";
+              localStorage.setItem("garuda-theme", next);
+              return next;
+            });
+          }}
+        >
+          {theme === "dark" ? "Light" : "Dark"}
+        </button>
         <div className="metrics">
           {scenario
             ? COUNT_KEYS.map((key) => (
@@ -54,7 +85,7 @@ export function App() {
           </Panel>
           <PanelResizeHandle className="resize-handle" />
           <Panel minSize={24} onResize={onResize}>
-            <MapView scenario={scenario} mapRef={mapRef} />
+            <MapView scenario={scenario} mapRef={mapRef} theme={theme} />
           </Panel>
           <PanelResizeHandle className="resize-handle" />
           <Panel defaultSize={26} minSize={18} maxSize={46} onResize={onResize}>
