@@ -166,7 +166,7 @@ def test_future_forecast_is_applied_before_status_filter_counts_and_limit():
         _aircraft("SU-A0004", base_id="B2"),
     ]
     before = [airframe.model_dump() for airframe in fleet]
-    ctx = _ctx(fleet, {"SU-A0001": 0.1, "SU-A0002": 0.5, "SU-A0003": 0.9})
+    ctx = _ctx(fleet, {"SU-A0001": 0.1, "SU-A0002": 0.7, "SU-A0003": 0.9})
     at = WHEN + timedelta(hours=2)
     output = _run(ctx, base_ids=["B1"], statuses=["FMC"], available_at=at, limit=1)
 
@@ -181,8 +181,10 @@ def test_future_forecast_is_applied_before_status_filter_counts_and_limit():
 
 
 @pytest.mark.parametrize("current, probability, expected", [
-    ("FMC", 0.0, "NMC"), ("FMC", 0.499, "NMC"),
-    ("NMC", 0.5, "FMC"), ("AOG", 1.0, "FMC"),
+    ("FMC", 0.0, "NMC"), ("FMC", 0.699, "NMC"),
+    ("FMC", 0.5, "NMC"), ("NMC", 0.5, "NMC"),
+    ("NMC", 0.7, "FMC"), ("NMC", 0.701, "FMC"),
+    ("FMC", 0.7, "FMC"), ("AOG", 1.0, "FMC"),
     ("PMC", 0.1, "PMC"), ("NMC", 0.1, "NMC"),
     ("AOG", 0.1, "AOG"), ("IN_MISSION", 0.1, "IN_MISSION"),
 ])

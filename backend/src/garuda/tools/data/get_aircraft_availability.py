@@ -73,7 +73,9 @@ async def get_aircraft_availability(
     tail-number-sorted items are limited. Past/current requests use the current
     snapshot; this tool does not reconstruct historical states.
 
-    Future requests classify provider P(FMC) >= 0.5 as FMC. Below that threshold,
+    Future requests use the assignment threshold from
+    docs/03_optimization_layer/aircraft_availability_forecast.md:
+    provider P(FMC) >= 0.7 is FMC. Below that threshold,
     retain an existing non-FMC status, or classify currently FMC aircraft as NMC.
     This binary forecast cannot predict which non-FMC condition will occur.
     Other state fields remain snapshot values, not forecasts.
@@ -164,6 +166,6 @@ def _forecast_status(
             f"availability provider returned an invalid FMC probability for {tail_no}; "
             "expected a finite number in [0, 1]"
         )
-    if probability >= 0.5:
+    if probability >= 0.7:
         return "FMC"
     return "NMC" if current_status == "FMC" else current_status
