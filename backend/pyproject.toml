@@ -32,7 +32,7 @@ opt = ["ortools>=9.10", "pulp>=2.8", "highspy>=1.7"]
 ml = ["xgboost>=2.0", "lightgbm>=4.3", "scikit-learn>=1.4", "lifelines>=0.28", "shap>=0.45", "pandas>=2.2", "joblib>=1.4", "hdbscan>=0.8"]
 moo = ["pymoo>=0.6"]
 rl = ["gymnasium>=0.29", "stable-baselines3>=2.3", "sb3-contrib>=2.3", "torch>=2.2", "simpy>=4.1"]
-api = ["fastapi>=0.110", "langgraph>=0.2", "structlog>=24"]
+api = ["fastapi>=0.110", "langgraph>=0.2", "langchain-openai>=0.2", "structlog>=24"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
