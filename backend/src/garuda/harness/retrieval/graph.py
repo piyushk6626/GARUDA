@@ -7,13 +7,21 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
+from pydantic import BaseModel, ValidationError
 
 from garuda.contracts.tool import ToolContext
 from garuda.harness.retrieval.prompts import retrieval_system_prompt
 from garuda.harness.retrieval.schemas import RetrievalResult, ToolCallRecord
 from garuda.harness.retrieval.session import RetrievalSession
 from garuda.harness.retrieval.state import RetrievalState
-from garuda.harness.retrieval.tools import ASK_NAME, CONTROL_TOOL_NAMES, FINISH_NAME, model_tools, run_data_call
+from garuda.harness.retrieval.tools import (
+    ASK_NAME,
+    CONTROL_TOOL_NAMES,
+    FINISH_NAME,
+    _validation_message,
+    model_tools,
+    run_data_call,
+)
 
 RunCall = Callable[[str, dict[str, Any], ToolContext], Awaitable[ToolCallRecord]]
 
@@ -24,6 +32,7 @@ def build_retrieval_graph(
     *,
     tools: list[Any] | None = None,
     run_call: RunCall = run_data_call,
+    finish_schema: type[BaseModel] | None = None,
 ):
     """Compile a graph closed over ``ctx``. ToolContext is not checkpoint state."""
     if tools is None:
@@ -36,10 +45,14 @@ def build_retrieval_graph(
     async def execute(state: RetrievalState) -> dict[str, Any]:
         raw_calls = getattr(state["messages"][-1], "tool_calls", None) or []
         calls = [_as_call(raw, index) for index, raw in enumerate(raw_calls)]
-        finished = state["finished"] or any(call["name"] == FINISH_NAME for call in calls)
-        question = _asked_question(calls) if not finished else ""
-        if question:
-            finished = True
+        finish_call = next((call for call in calls if call["name"] == FINISH_NAME), None)
+        finish_error = _finish_problem(finish_schema, finish_call["args"]) if finish_call else None
+        finished = state["finished"] or (finish_call is not None and finish_error is None)
+        question = ""
+        if finish_error is None and not finished:
+            question = _asked_question(calls)
+            if question:
+                finished = True
         data_calls = [call for call in calls if call["name"] not in CONTROL_TOOL_NAMES]
         budget = state["tool_budget"]
         allowed = data_calls[:budget]
@@ -59,10 +72,14 @@ def build_retrieval_graph(
         }
         if question:
             update["question"] = question
+        if finish_call is not None and finish_error is None:
+            update["finish_args"] = finish_call["args"]
         messages = [
             ToolMessage(content=_content(record), tool_call_id=call["id"], name=record.name)
             for call, record in zip([*allowed, *skipped], records, strict=True)
         ]
+        if finish_error is not None:
+            messages.extend(_control_error_messages(calls, [*allowed, *skipped], finish_error))
         if messages:
             update["messages"] = messages
         return update
@@ -107,6 +124,47 @@ async def retrieve(
     )
 
 
+async def run_loop(
+    query: str,
+    ctx: ToolContext,
+    *,
+    tools: list[Any],
+    run_call: RunCall,
+    system_prompt: str,
+    tool_budget: int,
+    model: Any | None,
+    session: RetrievalSession | None,
+    finish_schema: type[BaseModel] | None = None,
+) -> tuple[RetrievalState, RetrievalSession]:
+    """Select-execute loop shared by sub-agents. Returns the final state and the session."""
+    if tool_budget < 0:
+        raise ValueError("tool_budget must be >= 0")
+    if model is None:
+        from garuda.harness.llm import chat_model
+
+        model = chat_model()
+    if session is None:
+        session = RetrievalSession()
+    graph = build_retrieval_graph(ctx, model, tools=tools, run_call=run_call, finish_schema=finish_schema)
+    state = await graph.ainvoke(
+        {
+            "messages": _turn_messages(session, query, system_prompt),
+            "calls": [],
+            "tool_budget": tool_budget,
+            "finished": False,
+            "question": "",
+            "finish_args": None,
+        },
+        config={"recursion_limit": tool_budget * 4 + 5},
+    )
+    question = _question_from_state(state)
+    if question:
+        session.keep(state["messages"])
+    else:
+        session.close()
+    return state, session
+
+
 async def run_agent(
     query: str,
     ctx: ToolContext,
@@ -119,30 +177,17 @@ async def run_agent(
     session: RetrievalSession | None,
 ) -> RetrievalResult:
     """Select-execute loop shared by sub-agents that differ only in tools and prompt."""
-    if tool_budget < 0:
-        raise ValueError("tool_budget must be >= 0")
-    if model is None:
-        from garuda.harness.llm import chat_model
-
-        model = chat_model()
-    if session is None:
-        session = RetrievalSession()
-    graph = build_retrieval_graph(ctx, model, tools=tools, run_call=run_call)
-    state = await graph.ainvoke(
-        {
-            "messages": _turn_messages(session, query, system_prompt),
-            "calls": [],
-            "tool_budget": tool_budget,
-            "finished": False,
-            "question": "",
-        },
-        config={"recursion_limit": tool_budget * 4 + 5},
+    state, session = await run_loop(
+        query,
+        ctx,
+        tools=tools,
+        run_call=run_call,
+        system_prompt=system_prompt,
+        tool_budget=tool_budget,
+        model=model,
+        session=session,
     )
     question = _question_from_state(state)
-    if question:
-        session.keep(state["messages"])
-    else:
-        session.close()
     return RetrievalResult(
         query=query,
         calls=[ToolCallRecord.model_validate(call) for call in state["calls"]],
@@ -175,6 +220,36 @@ def _as_call(raw: Any, index: int) -> dict[str, Any]:
     if not isinstance(args, dict):
         args = {}
     return {"name": name, "args": args, "id": call_id}
+
+
+def _finish_problem(schema: type[BaseModel] | None, args: dict[str, Any]) -> str | None:
+    if schema is None:
+        return None
+    try:
+        schema.model_validate(args)
+    except ValidationError as exc:
+        return _validation_message(exc)
+    return None
+
+
+def _control_error_messages(
+    calls: list[dict[str, Any]], answered: list[dict[str, Any]], finish_error: str
+) -> list[ToolMessage]:
+    """Answer control calls left open by a rejected finish, so the model can correct it."""
+    answered_ids = {call["id"] for call in answered}
+    messages: list[ToolMessage] = []
+    for call in calls:
+        if call["id"] in answered_ids:
+            continue
+        error = finish_error if call["name"] == FINISH_NAME else "finish arguments were invalid; this call was not sent"
+        messages.append(
+            ToolMessage(
+                content=json.dumps({"ok": False, "error": error}),
+                tool_call_id=call["id"],
+                name=call["name"],
+            )
+        )
+    return messages
 
 
 def _content(record: ToolCallRecord) -> str:

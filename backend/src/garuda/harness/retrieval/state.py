@@ -16,3 +16,4 @@ class RetrievalState(TypedDict):
     tool_budget: int
     finished: bool
     question: str
+    finish_args: dict[str, Any] | None
