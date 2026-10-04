@@ -1,9 +1,9 @@
-"""Data tool `get_weapon_stock`. Backing: NEW queries/weapons.py. See docs/02_llm_harness/data_query_tools.md."""
+"""Data tool `get_weapon_stock`. Backing: queries/weapons.py. See docs/02_llm_harness/data_query_tools.md."""
 
 from pydantic import BaseModel
 
 from garuda.contracts.tool import ToolContext, ToolSpec
-from garuda.tools.stubs import fixed
+from garuda.queries.weapons import get_weapon_stock as query_weapon_stock
 
 
 class WeaponStockItem(BaseModel):
@@ -34,6 +34,7 @@ SPEC = ToolSpec(
     timeout_s=10,
 )
 
+# Retained for the existing skeleton graph import; the tool reads scenario data.
 STUB_OUTPUT = GetWeaponStockOutput(
     total=1,
     items=[
@@ -43,6 +44,21 @@ STUB_OUTPUT = GetWeaponStockOutput(
 
 
 async def get_weapon_stock(payload: GetWeaponStockInput, ctx: ToolContext) -> GetWeaponStockOutput:
-    """Skeleton: same output for every input until the query is wired."""
-    _ = payload, ctx
-    return fixed(STUB_OUTPUT)
+    """Read stock and its catalog category from a single scenario snapshot."""
+    rows = query_weapon_stock(
+        ctx.scenario.snapshot(),
+        base_ids=payload.base_ids,
+        weapon_codes=payload.weapon_codes,
+        category=payload.category,
+    )
+    items = [
+        WeaponStockItem(
+            base_id=stock.base_id,
+            weapon_code=stock.weapon_code,
+            category=weapon.category,
+            quantity=stock.quantity,
+            reserved_qty=stock.reserved_qty,
+        )
+        for stock, weapon in rows
+    ]
+    return GetWeaponStockOutput(total=len(items), items=items)

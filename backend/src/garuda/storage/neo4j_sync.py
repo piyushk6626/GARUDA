@@ -1,6 +1,7 @@
 from neo4j import AsyncGraphDatabase
 
 from garuda.bases import BASES
+from garuda.contracts.plan import PlanDraft
 from garuda.generators.weather import cells_for_bases
 from garuda.schemas.aircraft import Aircraft, Squadron
 from garuda.schemas.airspace import AirspaceZone
@@ -14,7 +15,7 @@ from garuda.schemas.weather import WeatherCell
 _CLEAR = """
 MATCH (n)
 WHERE n:Mission OR n:Target OR n:Threat OR n:WeaponStock OR n:WeaponType OR n:Base
-   OR n:Aircraft OR n:Squadron OR n:Crew OR n:AircraftType OR n:AirspaceZone
+   OR n:Aircraft OR n:Squadron OR n:Crew OR n:AircraftType OR n:AirspaceZone OR n:Plan
 DETACH DELETE n
 """
 
@@ -189,6 +190,101 @@ WITH z, row
 MATCH (m:Mission {mission_id: row.mission_id})
 MERGE (m)-[:USES_AIRSPACE]->(z)
 """
+
+
+_PLAN = """
+MERGE (p:Plan {plan_id: $plan_id})
+SET p.status = $status,
+    p.scenario_time = $scenario_time,
+    p.parent_plan_id = $parent_plan_id
+WITH p
+OPTIONAL MATCH (p)-[r:INCLUDES|ASSIGNS|ASSIGNS_CREW]->()
+DELETE r
+"""
+
+_PLAN_ASSIGNS = """
+UNWIND $rows AS row
+MATCH (p:Plan {plan_id: $plan_id})
+MATCH (a:Aircraft {tail_no: row.tail_no})
+CREATE (p)-[:ASSIGNS {
+    mission_id: row.mission_id,
+    sortie_no: row.sortie_no,
+    load_config_id: row.load_config_id,
+    depart_time: row.depart_time,
+    tot: row.tot
+}]->(a)
+WITH p, row
+MATCH (m:Mission {mission_id: row.mission_id})
+MERGE (p)-[:INCLUDES]->(m)
+"""
+
+_PLAN_CREW = """
+UNWIND $rows AS row
+MATCH (p:Plan {plan_id: $plan_id})
+MATCH (c:Crew {crew_id: row.crew_id})
+CREATE (p)-[:ASSIGNS_CREW {
+    slot_id: row.slot_id,
+    role: row.role,
+    tail_no: row.tail_no,
+    mission_id: row.mission_id
+}]->(c)
+"""
+
+
+async def sync_plan(uri: str, user: str, password: str, plan: PlanDraft) -> None:
+    """Replace the plan's graph links with the draft's assignments. Safe to rerun."""
+    driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+    try:
+        async with driver.session() as session:
+            await session.execute_write(_write_plan, plan)
+    finally:
+        await driver.close()
+
+
+async def _write_plan(tx, plan: PlanDraft) -> None:
+    await _consume(
+        tx,
+        _PLAN,
+        plan_id=plan.plan_id,
+        status=plan.status,
+        scenario_time=plan.scenario_time.isoformat(),
+        parent_plan_id=plan.parent_plan_id,
+    )
+    assigns = _plan_assign_rows(plan)
+    if assigns:
+        await _consume(tx, _PLAN_ASSIGNS, plan_id=plan.plan_id, rows=assigns)
+    crew = _plan_crew_rows(plan)
+    if crew:
+        await _consume(tx, _PLAN_CREW, plan_id=plan.plan_id, rows=crew)
+
+
+def _plan_assign_rows(plan: PlanDraft) -> list[dict]:
+    return [
+        {
+            "tail_no": assignment.tail_no,
+            "mission_id": assignment.mission_id,
+            "sortie_no": sortie_no,
+            "load_config_id": assignment.config_id,
+            "depart_time": assignment.depart.isoformat(),
+            "tot": assignment.tot.isoformat(),
+        }
+        for sortie_no, assignment in enumerate(plan.assignments, start=1)
+    ]
+
+
+def _plan_crew_rows(plan: PlanDraft) -> list[dict]:
+    slots = {slot.slot_id: slot for slot in plan.sortie_slots}
+    return [
+        {
+            "crew_id": crew.crew_id,
+            "slot_id": crew.slot_id,
+            "role": crew.role,
+            "tail_no": slots[crew.slot_id].tail_no,
+            "mission_id": slots[crew.slot_id].mission_id,
+        }
+        for crew in plan.crew_assignments
+        if crew.slot_id in slots
+    ]
 
 
 async def sync_neo4j(uri: str, user: str, password: str, scenario: GeneratedScenario) -> None:

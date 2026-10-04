@@ -1,7 +1,7 @@
 """Ports the tools read through ToolContext. Implementations live in memory.py / postgres.py."""
 
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 from garuda.contracts.plan import PlanDraft
 from garuda.schemas.mission import GeneratedScenario
@@ -21,6 +21,12 @@ class PlanStore(Protocol):
 class ModelStore(Protocol):
     def load(self, name: str, version: str | None = None) -> object: ...
     def save(self, name: str, artifact: object, metadata: dict) -> str: ...
+
+
+class GraphReader(Protocol):
+    """Read-only graph access. Implementations must refuse writes."""
+
+    async def read(self, cypher: str, params: dict[str, Any], *, timeout_s: float) -> list[dict[str, Any]]: ...
 
 
 class Clock(Protocol):

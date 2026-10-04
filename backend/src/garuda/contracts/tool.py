@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from garuda.context.ports import ModelStore, PlanStore, ScenarioSource
+    from garuda.context.ports import GraphReader, ModelStore, PlanStore, ScenarioSource
     from garuda.providers.protocols import Providers
 
 SideEffect = Literal["none", "draft", "commit"]
@@ -32,3 +32,4 @@ class ToolContext:
     providers: "Providers"
     scenario_time: datetime
     seed: int = 42
+    graph: "GraphReader | None" = None
