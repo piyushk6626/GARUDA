@@ -1,0 +1,5 @@
+# The executable test image uses `uv sync --frozen` against the committed root uv.lock.
+# This companion manifest intentionally records its direct, exact test inputs.
+pytest==8.4.2
+pytest-asyncio==1.2.0
+confluent-kafka==2.11.1

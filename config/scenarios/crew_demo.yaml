@@ -1,0 +1,8 @@
+generator_version: crew-demo-v1
+seed: 42
+start_at: "2026-10-03T00:00:00Z"
+horizon_hours: 72
+aircraft_scenario: config/scenarios/aircraft_demo.yaml
+catalog: config/crew_types.yaml
+total_crew: 300
+timezone: Asia/Kolkata

@@ -1,0 +1,202 @@
+name: garuda-adsb
+
+services:
+  timescaledb:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: infra/adsb/timescaledb/Dockerfile
+    environment:
+      POSTGRES_USER: ${ADSB_PG_USER:-garuda}
+      POSTGRES_PASSWORD: ${ADSB_PG_PASSWORD:-garuda-local-only}
+      POSTGRES_DB: ${ADSB_PG_DATABASE:-garuda}
+    command: [postgres, -c, shared_preload_libraries=timescaledb]
+    ports:
+      - "127.0.0.1:${ADSB_PG_PORT:-15432}:5432"
+    volumes:
+      - timescaledb-data:/home/postgres/pgdata/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  redis:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: infra/adsb/redis/Dockerfile
+    command: [redis-server, /usr/local/etc/redis/redis.conf, --requirepass, "${ADSB_REDIS_PASSWORD:-garuda-redis-local-only}"]
+    environment:
+      REDISCLI_AUTH: ${ADSB_REDIS_PASSWORD:-garuda-redis-local-only}
+    ports:
+      - "127.0.0.1:${ADSB_REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redpanda:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: infra/adsb/redpanda/Dockerfile
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=redpanda:33145
+    ports:
+      - "127.0.0.1:19092:19092"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: [CMD, rpk, cluster, health, --exit-when-healthy]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+
+  redpanda-init:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: infra/adsb/redpanda/Dockerfile
+    entrypoint: [/bin/sh, /opt/garuda/init-topics.sh]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: "no"
+
+  minio:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: infra/adsb/minio/Dockerfile
+    environment:
+      MINIO_ROOT_USER: ${ADSB_MINIO_USER:-garuda-local}
+      MINIO_ROOT_PASSWORD: ${ADSB_MINIO_PASSWORD:-garuda-minio-local-only}
+    ports:
+      - "127.0.0.1:${ADSB_MINIO_PORT:-19000}:9000"
+      - "127.0.0.1:${ADSB_MINIO_CONSOLE_PORT:-19001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: [CMD-SHELL, 'mc alias set health http://127.0.0.1:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null && mc ready health']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  store-tests:
+    profiles: [test]
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: infra/adsb/tests/Dockerfile
+    environment:
+      ADSB_PG_HOST: timescaledb
+      ADSB_PG_PORT: "5432"
+      ADSB_PG_USER: ${ADSB_PG_USER:-garuda}
+      ADSB_PG_PASSWORD: ${ADSB_PG_PASSWORD:-garuda-local-only}
+      ADSB_PG_DATABASE: ${ADSB_PG_DATABASE:-garuda}
+      ADSB_REDIS_HOST: redis
+      ADSB_REDIS_PORT: "6379"
+      ADSB_REDIS_PASSWORD: ${ADSB_REDIS_PASSWORD:-garuda-redis-local-only}
+      ADSB_KAFKA_BROKERS: redpanda:9092
+      ADSB_MINIO_ENDPOINT: http://minio:9000
+      ADSB_MINIO_USER: ${ADSB_MINIO_USER:-garuda-local}
+      ADSB_MINIO_PASSWORD: ${ADSB_MINIO_PASSWORD:-garuda-minio-local-only}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      adsb-migrate:
+        condition: service_completed_successfully
+
+  adsb-app:
+    profiles: [app]
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: infra/adsb/app/Dockerfile
+    environment:
+      ADSB_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      ADSB_POSTGRES_DSN: postgresql://garuda:garuda-local-only@timescaledb:5432/garuda
+      ADSB_REDIS_URL: redis://:garuda-redis-local-only@redis:6379/0
+      ADSB_MINIO_ENDPOINT: http://minio:9000
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+
+  adsb-migrate:
+    profiles: [app, test]
+    build:
+      context: ../..
+      dockerfile: infra/adsb/app/Dockerfile
+    command: [uv, run, alembic, upgrade, head]
+    environment:
+      ADSB_POSTGRES_DSN: postgresql://garuda:garuda-local-only@timescaledb:5432/garuda
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: "no"
+
+  adsb-history-worker:
+    profiles: [app]
+    build:
+      context: ../..
+      dockerfile: infra/adsb/app/Dockerfile
+    command: [uv, run, python, -m, backend.app, worker, history]
+    environment:
+      ADSB_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      ADSB_POSTGRES_DSN: postgresql://garuda:garuda-local-only@timescaledb:5432/garuda
+    depends_on:
+      adsb-migrate:
+        condition: service_completed_successfully
+      redpanda-init:
+        condition: service_completed_successfully
+
+  adsb-live-worker:
+    profiles: [app]
+    build:
+      context: ../..
+      dockerfile: infra/adsb/app/Dockerfile
+    command: [uv, run, python, -m, backend.app, worker, live]
+    environment:
+      ADSB_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      ADSB_REDIS_URL: redis://:garuda-redis-local-only@redis:6379/0
+    depends_on:
+      adsb-migrate:
+        condition: service_completed_successfully
+      redpanda-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+volumes:
+  timescaledb-data:
+  redis-data:
+  redpanda-data:
+  minio-data:

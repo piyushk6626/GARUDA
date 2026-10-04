@@ -1,0 +1,131 @@
+name: garuda-crew
+services:
+  timescaledb:
+    platform: linux/amd64
+    build: {context: ../.., dockerfile: infra/crew/timescaledb/Dockerfile}
+    environment:
+      POSTGRES_USER: ${CREW_PG_USER:-garuda}
+      POSTGRES_PASSWORD: ${CREW_PG_PASSWORD:-garuda-crew-local-only}
+      POSTGRES_DB: ${CREW_PG_DATABASE:-garuda_crew}
+      CREW_READER_USER: ${CREW_READER_USER:-garuda_crew_reader_login}
+      CREW_READER_PASSWORD: ${CREW_READER_PASSWORD:-change-this-reader-password}
+    command: [postgres, -c, shared_preload_libraries=timescaledb]
+    ports: ["127.0.0.1:${CREW_PG_PORT:-45432}:5432"]
+    volumes: [timescaledb-data:/home/postgres/pgdata/data]
+    networks: [crew]
+    healthcheck: {test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'], interval: 5s, timeout: 5s, retries: 30, start_period: 30s}
+  redis:
+    platform: linux/amd64
+    build: {context: ../.., dockerfile: infra/crew/redis/Dockerfile}
+    command: [redis-server, /usr/local/etc/redis/redis.conf, --requirepass, "${CREW_REDIS_PASSWORD:-garuda-crew-redis-local-only}"]
+    environment: {REDISCLI_AUTH: "${CREW_REDIS_PASSWORD:-garuda-crew-redis-local-only}"}
+    ports: ["127.0.0.1:${CREW_REDIS_PORT:-46379}:6379"]
+    volumes: [redis-data:/data]
+    networks: [crew]
+    healthcheck: {test: [CMD, redis-cli, ping], interval: 5s, timeout: 5s, retries: 30}
+  neo4j:
+    platform: linux/amd64
+    build: {context: ../.., dockerfile: infra/crew/neo4j/Dockerfile}
+    environment: {NEO4J_AUTH: "neo4j/${CREW_NEO4J_PASSWORD:-garuda-crew-neo4j-local-only}", NEO4J_server_memory_heap_initial__size: 256m, NEO4J_server_memory_heap_max__size: 512m}
+    ports: ["127.0.0.1:${CREW_NEO4J_BOLT_PORT:-47687}:7687", "127.0.0.1:${CREW_NEO4J_HTTP_PORT:-47474}:7474"]
+    volumes: [neo4j-data:/data, neo4j-logs:/logs]
+    networks: [crew]
+    healthcheck: {test: [CMD-SHELL, 'cypher-shell -a bolt://localhost:7687 -u neo4j -p "$${NEO4J_AUTH#*/}" "RETURN 1" >/dev/null'], interval: 10s, timeout: 10s, retries: 30, start_period: 30s}
+  redpanda:
+    platform: linux/amd64
+    build: {context: ../.., dockerfile: infra/crew/redpanda/Dockerfile}
+    command: [redpanda, start, --mode=dev-container, --smp=1, --memory=1G, --reserve-memory=0M, "--kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:29092", "--advertise-kafka-addr=internal://redpanda:9092,external://localhost:${CREW_KAFKA_PORT:-49092}", --rpc-addr=0.0.0.0:33145, --advertise-rpc-addr=redpanda:33145]
+    ports: ["127.0.0.1:${CREW_KAFKA_PORT:-49092}:29092"]
+    volumes: [redpanda-data:/var/lib/redpanda/data]
+    networks: [crew]
+    healthcheck: {test: [CMD, rpk, cluster, health, --exit-when-healthy], interval: 5s, timeout: 10s, retries: 30, start_period: 20s}
+  crew-migrate:
+    profiles: [app, test]
+    build: {context: ../.., dockerfile: infra/crew/app/Dockerfile}
+    command: [uv, run, alembic, upgrade, head]
+    environment: {GARUDA_POSTGRES_DSN: "postgresql://${CREW_PG_USER:-garuda}:${CREW_PG_PASSWORD:-garuda-crew-local-only}@timescaledb:5432/${CREW_PG_DATABASE:-garuda_crew}"}
+    depends_on: {timescaledb: {condition: service_healthy}}
+    networks: [crew]
+    restart: "no"
+  reader-bootstrap:
+    profiles: [app, test]
+    build: {context: ../.., dockerfile: infra/crew/app/Dockerfile}
+    command: ["uv", "run", "python", "-m", "backend.app.data.bootstrap.crew_reader"]
+    environment:
+      GARUDA_POSTGRES_DSN: "postgresql://${CREW_PG_USER:-garuda}:${CREW_PG_PASSWORD:-garuda-crew-local-only}@timescaledb:5432/${CREW_PG_DATABASE:-garuda_crew}"
+      CREW_READER_USER: "${CREW_READER_USER:-garuda_crew_reader_login}"
+      CREW_READER_PASSWORD: "${CREW_READER_PASSWORD:-change-this-reader-password}"
+    depends_on: {crew-migrate: {condition: service_completed_successfully}}
+    networks: [crew]
+    restart: "no"
+  redpanda-init:
+    build: {context: ../.., dockerfile: infra/crew/redpanda/Dockerfile}
+    entrypoint: [/bin/sh, /opt/garuda/init-topics.sh]
+    depends_on: {redpanda: {condition: service_healthy}}
+    networks: [crew]
+    restart: "no"
+  neo4j-init:
+    build: {context: ../.., dockerfile: infra/crew/neo4j/Dockerfile}
+    entrypoint: [/bin/sh, -c, 'cypher-shell -a bolt://neo4j:7687 -u neo4j -p "$$CREW_NEO4J_PASSWORD" -f /opt/garuda/constraints.cypher']
+    environment: {CREW_NEO4J_PASSWORD: "${CREW_NEO4J_PASSWORD:-garuda-crew-neo4j-local-only}"}
+    depends_on: {neo4j: {condition: service_healthy}}
+    networks: [crew]
+    restart: "no"
+  crew-cli:
+    profiles: [app]
+    build: {context: ../.., dockerfile: infra/crew/app/Dockerfile}
+    entrypoint: [uv, run, garuda-crew]
+    environment: &crewenv
+      GARUDA_POSTGRES_DSN: "postgresql://${CREW_PG_USER:-garuda}:${CREW_PG_PASSWORD:-garuda-crew-local-only}@timescaledb:5432/${CREW_PG_DATABASE:-garuda_crew}"
+      CREW_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      CREW_REDIS_URL: "redis://:${CREW_REDIS_PASSWORD:-garuda-crew-redis-local-only}@redis:6379/0"
+      CREW_NEO4J_URI: bolt://neo4j:7687
+      CREW_NEO4J_PASSWORD: ${CREW_NEO4J_PASSWORD:-garuda-crew-neo4j-local-only}
+    depends_on: {reader-bootstrap: {condition: service_completed_successfully}, redpanda-init: {condition: service_completed_successfully}, neo4j-init: {condition: service_completed_successfully}}
+    networks: [crew]
+  crew-outbox:
+    profiles: [app]
+    build: {context: ../.., dockerfile: infra/crew/app/Dockerfile}
+    command: [uv, run, garuda-crew, worker, outbox, --forever]
+    environment: *crewenv
+    depends_on: {reader-bootstrap: {condition: service_completed_successfully}, redpanda-init: {condition: service_completed_successfully}}
+    networks: [crew]
+  crew-history:
+    profiles: [app]
+    build: {context: ../.., dockerfile: infra/crew/app/Dockerfile}
+    command: [uv, run, garuda-crew, worker, history, --forever]
+    environment: *crewenv
+    depends_on: {crew-outbox: {condition: service_started}}
+    networks: [crew]
+  crew-live:
+    profiles: [app]
+    build: {context: ../.., dockerfile: infra/crew/app/Dockerfile}
+    command: [uv, run, garuda-crew, worker, live, --forever]
+    environment: *crewenv
+    depends_on: {crew-outbox: {condition: service_started}}
+    networks: [crew]
+  crew-graph:
+    profiles: [app]
+    build: {context: ../.., dockerfile: infra/crew/app/Dockerfile}
+    command: [uv, run, garuda-crew, worker, graph, --forever]
+    environment: *crewenv
+    depends_on: {crew-outbox: {condition: service_started}, neo4j-init: {condition: service_completed_successfully}}
+    networks: [crew]
+  store-tests:
+    profiles: [test]
+    build: {context: ../.., dockerfile: infra/crew/tests/Dockerfile}
+    environment:
+      GARUDA_CREW_INTEGRATION: "1"
+      CREW_PG_HOST: timescaledb
+      CREW_PG_PORT: "5432"
+      CREW_PG_USER: ${CREW_PG_USER:-garuda}
+      CREW_PG_PASSWORD: ${CREW_PG_PASSWORD:-garuda-crew-local-only}
+      CREW_PG_DATABASE: ${CREW_PG_DATABASE:-garuda_crew}
+      CREW_REDIS_URL: "redis://:${CREW_REDIS_PASSWORD:-garuda-crew-redis-local-only}@redis:6379/0"
+      CREW_NEO4J_URI: bolt://neo4j:7687
+      CREW_NEO4J_PASSWORD: ${CREW_NEO4J_PASSWORD:-garuda-crew-neo4j-local-only}
+      CREW_KAFKA_BROKERS: redpanda:9092
+    depends_on: {reader-bootstrap: {condition: service_completed_successfully}, redis: {condition: service_healthy}, neo4j-init: {condition: service_completed_successfully}, redpanda-init: {condition: service_completed_successfully}}
+    networks: [crew]
+networks: {crew: {}}
+volumes: {timescaledb-data: {}, redis-data: {}, neo4j-data: {}, neo4j-logs: {}, redpanda-data: {}}

@@ -1,0 +1,6 @@
+# Requires Docker Compose v2.24+ for !reset. Test project publishes no host ports.
+services:
+  timescaledb: {ports: !reset []}
+  redis: {ports: !reset []}
+  neo4j: {ports: !reset []}
+  redpanda: {ports: !reset []}

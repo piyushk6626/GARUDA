@@ -1,0 +1,6 @@
+{
+  "format": "garuda-crew-state-checksum-v1",
+  "run_id": "fixture",
+  "seed": 42,
+  "state_checksum": "db0da637215f357e374361214be2eabb9aa76c752acba297dd6a4fe21315cb7a"
+}

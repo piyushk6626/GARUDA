@@ -1,0 +1,6 @@
+services:
+  postgres: {ports: !reset []}
+  redis: {ports: !reset []}
+  neo4j: {ports: !reset []}
+  redpanda: {ports: !reset []}
+  minio: {ports: !reset []}

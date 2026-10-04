@@ -1,0 +1,1 @@
+"""Crew fatigue calculations."""
