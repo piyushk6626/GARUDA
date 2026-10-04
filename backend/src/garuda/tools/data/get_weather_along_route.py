@@ -1,8 +1,8 @@
 """Data tool `get_weather_along_route`. Backing: queries/weather.py (exists). See docs/02_llm_harness/data_query_tools.md."""
 
 from garuda.contracts.tool import ToolContext, ToolSpec
-from garuda.schemas.weather import WeatherRouteQuery, WeatherRouteResult, WeatherSegment
-from garuda.tools.stubs import STUB_TIME, fixed
+from garuda.queries.weather import get_weather_along_route as query_weather_along_route
+from garuda.schemas.weather import WeatherRouteQuery, WeatherRouteResult
 
 GetWeatherAlongRouteInput = WeatherRouteQuery
 GetWeatherAlongRouteOutput = WeatherRouteResult
@@ -16,28 +16,9 @@ SPEC = ToolSpec(
     timeout_s=10,
 )
 
-STUB_OUTPUT = GetWeatherAlongRouteOutput(
-    segments=[
-        WeatherSegment(
-            time=STUB_TIME,
-            lat=28.61,
-            lon=77.21,
-            flyability=0.8,
-            ceiling_ft=3000.0,
-            vis_km=8.0,
-            wind_kts=12.0,
-            wind_dir_deg=270.0,
-            cb_flag=False,
-        )
-    ],
-    worst_flyability=0.8,
-    advisories=["skeleton"],
-)
-
 
 async def get_weather_along_route(
     payload: GetWeatherAlongRouteInput, ctx: ToolContext
 ) -> GetWeatherAlongRouteOutput:
-    """Skeleton: same output for every input until the query is wired."""
-    _ = payload, ctx
-    return fixed(STUB_OUTPUT)
+    """Sample the scenario forecast using the route query's timing and coverage rules."""
+    return query_weather_along_route(ctx.scenario.snapshot().cells, payload)
