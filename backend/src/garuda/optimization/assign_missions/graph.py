@@ -1,9 +1,33 @@
-"""LangGraph skeleton for `assign_missions`.
+"""Optional LangGraph adapter using the implemented tool and unchanged contracts."""
 
-Straight line: build_problem -> solve -> explain. The last node always emits `STUB_OUTPUT`.
-"""
+from typing import Any, TypedDict
 
-from garuda.optimization.assign_missions.tool import STUB_OUTPUT
-from garuda.tools.adapters.langgraph import compile_tool_graph
+from langgraph.graph import END, StateGraph
 
-GRAPH = compile_tool_graph(steps=("build_problem", "solve", "explain"), output=STUB_OUTPUT)
+from garuda.contracts.tool import ToolContext
+from garuda.optimization.assign_missions.schemas import AssignMissionsInput
+from garuda.optimization.assign_missions.tool import assign_missions
+
+
+class State(TypedDict, total=False):
+    payload: dict[str, Any]
+    ctx: ToolContext
+    output: dict[str, Any]
+
+
+async def run(state: State):
+    output = await assign_missions(
+        AssignMissionsInput.model_validate(state["payload"]), state["ctx"]
+    )
+    return {"output": output.model_dump(mode="json")}
+
+
+def _graph():
+    graph = StateGraph(State)
+    graph.add_node("assign_missions", run)
+    graph.set_entry_point("assign_missions")
+    graph.add_edge("assign_missions", END)
+    return graph.compile()
+
+
+GRAPH = _graph()

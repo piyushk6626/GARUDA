@@ -1,10 +1,10 @@
-"""Data tool `get_mission_requests`. Backing: NEW queries/missions.py. See docs/02_llm_harness/data_query_tools.md."""
+"""Data tool `get_mission_requests`. Backing: queries/missions.py. See docs/02_llm_harness/data_query_tools.md."""
 
 from pydantic import BaseModel
 
 from garuda.contracts.geo import TimeWindow
 from garuda.contracts.tool import ToolContext, ToolSpec
-from garuda.tools.stubs import fixed
+from garuda.queries.missions import get_mission_requests as query_mission_requests
 
 
 class MissionItem(BaseModel):
@@ -42,6 +42,21 @@ STUB_OUTPUT = GetMissionRequestsOutput(
 
 
 async def get_mission_requests(payload: GetMissionRequestsInput, ctx: ToolContext) -> GetMissionRequestsOutput:
-    """Skeleton: same output for every input until the query is wired."""
-    _ = payload, ctx
-    return fixed(STUB_OUTPUT)
+    """Filter snapshot missions and return only the public item fields."""
+    missions = query_mission_requests(
+        ctx.scenario.snapshot().missions,
+        status=payload.status,
+        types=payload.types,
+        priority_max=payload.priority_max,
+        window=payload.window,
+    )
+    items = [
+        MissionItem(
+            mission_id=mission.mission_id,
+            type=mission.type,
+            status=mission.status,
+            priority=mission.priority,
+        )
+        for mission in missions
+    ]
+    return GetMissionRequestsOutput(total=len(items), items=items)

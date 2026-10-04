@@ -1,6 +1,13 @@
+import asyncio
+
 from garuda.contracts.tool import ToolContext, ToolSpec
-from garuda.optimization.pareto_tradeoffs.schemas import ParetoTradeoffsInput, ParetoTradeoffsOutput, PlanOption
-from garuda.tools.stubs import fixed
+from garuda.optimization.pareto_tradeoffs.explain import explain
+from garuda.optimization.pareto_tradeoffs.model import solve
+from garuda.optimization.pareto_tradeoffs.problem import build_problem
+from garuda.optimization.pareto_tradeoffs.schemas import (
+    ParetoTradeoffsInput,
+    ParetoTradeoffsOutput,
+)
 
 SPEC = ToolSpec(
     name="pareto_tradeoffs",
@@ -11,25 +18,18 @@ SPEC = ToolSpec(
     timeout_s=120,
 )
 
-STUB_OUTPUT = ParetoTradeoffsOutput(
-    options=[
-        PlanOption(
-            plan_id="plan-stub",
-            label="Balanced",
-            objectives={"value": 1.0, "risk": 0.2},
-            key_differences=["skeleton"],
-        )
-    ],
-    ideal={"value": 1.0, "risk": 0.0},
-    nadir={"value": 0.0, "risk": 1.0},
-    recommendation="Balanced",
-)
 
+async def pareto_tradeoffs(
+    payload: ParetoTradeoffsInput, ctx: ToolContext
+) -> ParetoTradeoffsOutput:
+    """Compute validated alternatives using the unchanged input/output contract."""
 
-async def pareto_tradeoffs(payload: ParetoTradeoffsInput, ctx: ToolContext) -> ParetoTradeoffsOutput:
-    """Skeleton: same output for every input until the solver is wired."""
-    _ = payload, ctx
-    return fixed(STUB_OUTPUT)
+    # The shared run_cpu executor is still a stub. Keep CPU work off the loop.
+    def compute():
+        problem = build_problem(payload, ctx)
+        return explain(problem, solve(problem))
+
+    return await asyncio.to_thread(compute)
 
 
 # TODO(phase1): from garuda.tools.registry import register; register(SPEC, pareto_tradeoffs)

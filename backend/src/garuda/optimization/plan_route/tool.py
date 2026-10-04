@@ -1,6 +1,12 @@
+import asyncio
+import warnings
+
 from garuda.contracts.tool import ToolContext, ToolSpec
+from garuda.optimization.plan_route.explain import explain
+from garuda.optimization.plan_route.model import solve
+from garuda.optimization.plan_route.problem import build_problem
 from garuda.optimization.plan_route.schemas import PlanRouteInput, PlanRouteOutput, RouteSummary
-from garuda.tools.stubs import STUB_WAYPOINT, fixed
+from garuda.tools.stubs import STUB_WAYPOINT
 
 SPEC = ToolSpec(
     name="plan_route",
@@ -22,9 +28,22 @@ STUB_OUTPUT = PlanRouteOutput(
 
 
 async def plan_route(payload: PlanRouteInput, ctx: ToolContext) -> PlanRouteOutput:
-    """Skeleton: same output for every input until the solver is wired."""
-    _ = payload, ctx
-    return fixed(STUB_OUTPUT)
+    """Plan one leg without writing a draft or changing the public contract."""
+    # The shared CPU executor is still a stub. Keep work off the event loop.
+    return await asyncio.to_thread(_compute, payload, ctx)
+
+
+def _compute(payload, ctx):
+    problem = build_problem(payload, ctx)
+    solution = solve(problem)
+    if solution.risk_cap_exceeded:
+        warnings.warn(
+            "No route satisfying max_risk was found; returning the least-risk route found above the cap. "
+            "Consider SEAD or changing the altitude profile.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return explain(problem, solution)
 
 
 # TODO(phase1): from garuda.tools.registry import register; register(SPEC, plan_route)

@@ -10,19 +10,22 @@ from garuda.schemas.airspace import AirspaceZone, is_active
 
 def zones_intersecting(
     zones: list[AirspaceZone],
-    route_wkt: str,
-    altitude_ft: int,
+    route_wkt: str | None,
+    altitude_ft: int | None,
     at: datetime,
 ) -> list[AirspaceZone]:
-    route = shapely_wkt.loads(route_wkt)
-    if route.is_empty:
+    """Intersect a route or polygon; None omits spatial or altitude filtering."""
+    if at.tzinfo is None or at.utcoffset() is None:
+        raise ValueError("at must be timezone-aware")
+    route = shapely_wkt.loads(route_wkt) if route_wkt is not None else None
+    if route is not None and route.is_empty:
         raise ValueError("route geometry is empty")
     matched = [
         zone
         for zone in zones
         if is_active(zone, at)
-        and zone.floor_ft <= altitude_ft <= zone.ceiling_ft
-        and _intersects(zone, route)
+        and (altitude_ft is None or zone.floor_ft <= altitude_ft <= zone.ceiling_ft)
+        and (route is None or _intersects(zone, route))
     ]
     matched.sort(key=lambda zone: zone.zone_id)
     return matched

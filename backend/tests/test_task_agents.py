@@ -1,11 +1,13 @@
 """Task agents: a scripted model runs one optimizer tool and may call the three query agents."""
 
 import asyncio
+from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 from langchain_core.messages import AIMessage
+from pydantic import create_model
 
 from garuda.contracts.tool import ToolContext
 from garuda.harness.ontology.graph import query_graph
@@ -23,8 +25,8 @@ from garuda.harness.tasks.tools import (
 
 WHEN = datetime(2026, 6, 1, 6, 0, tzinfo=timezone.utc)
 WHEN_ISO = WHEN.isoformat()
-# These two solvers read the scenario. A blank context returns that error to the model.
-NEEDS_SCENARIO = frozenset({"assign_weapons_to_targets", "schedule_tanker_aar"})
+# Every solver reads the scenario or plan store. A blank context returns that error to the model.
+NEEDS_SCENARIO = frozenset(TASKS)
 FINISH = {"status": "done", "assumptions": ["default horizon"], "note": "ready for the main agent"}
 MARKERS = {
     "assign_missions": "retask_rolling_horizon",
@@ -56,7 +58,7 @@ VALID = {
     "plan_route": {
         "origin": {"lat": 28.0, "lon": 77.0},
         "destination": {"lat": 29.0, "lon": 78.0},
-        "aircraft_type": "SU-30",
+        "aircraft_type": "Su-30MKI",
         "depart_time": WHEN_ISO,
     },
     "schedule_tanker_aar": {"plan_id": "plan-1"},
@@ -153,13 +155,27 @@ def test_main_tool_then_finish_returns_output_and_the_finish_note(task):
     assert call.name == task
     assert call.args == VALID[task]
     assert result.agent_calls == []
-    if task in NEEDS_SCENARIO:
-        assert call.ok is False
-        assert call.error
-        return
+    assert task in NEEDS_SCENARIO
+    assert call.ok is False
+    assert call.error
+
+
+@pytest.mark.parametrize("task", list(TASKS))
+def test_main_tool_output_is_returned_as_call_data(task, monkeypatch):
+    output_model = create_model(f"{task}_output", **{OUTPUT_KEY[task]: (str, "solved")})
+
+    async def solved(payload, ctx):
+        return output_model()
+
+    monkeypatch.setitem(TASKS, task, replace(TASKS[task], fn=solved))
+    model = ScriptedModel([_calls((task, VALID[task], "m1")), _calls((FINISH_NAME, FINISH, "f1"))])
+
+    result = asyncio.run(run_task(task, "run it", _ctx(), model=model, sub_agents=_agents()))
+
+    call = result.main_calls[0]
     assert call.ok is True
     assert call.error is None
-    assert OUTPUT_KEY[task] in call.data
+    assert call.data == {OUTPUT_KEY[task]: "solved"}
 
 
 @pytest.mark.parametrize("task", list(TASKS))

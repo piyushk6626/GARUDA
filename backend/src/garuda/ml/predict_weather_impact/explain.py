@@ -1,5 +1,7 @@
-"""explain(problem, solution) -> Explanation. See docs/03_optimization_layer/weather_impact_prediction.md."""
+"""Observed weather constraints and confidence flags (not causal model attributions)."""
+
+from garuda.ml.predict_weather_impact.features import WeatherFeatures
 
 
-def explain(problem, solution):
-    raise NotImplementedError
+def explain(row: WeatherFeatures) -> list[str]:
+    return list(row.limiting_factors)

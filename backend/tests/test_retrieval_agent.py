@@ -5,15 +5,30 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from langchain_core.messages import AIMessage
 
 from garuda.contracts.tool import ToolContext
 from garuda.harness.llm import DEFAULT_MODEL, chat_model
 from garuda.harness.retrieval import RetrievalSession, retrieve
 from garuda.harness.retrieval.prompts import retrieval_system_prompt
-from garuda.harness.retrieval.tools import ASK_NAME, DATA_TOOL_NAMES, FINISH_NAME
+from garuda.harness.retrieval.tools import ASK_NAME, DATA_TOOL_NAMES, FINISH_NAME, TOOLS_BY_NAME
+from garuda.tools.data import get_aircraft_availability, get_civil_traffic, get_crew_status, get_weapon_stock
 
 WHEN = datetime(2026, 6, 1, 6, 0, tzinfo=timezone.utc)
+SNAPSHOT_TOOLS = (get_aircraft_availability, get_crew_status, get_weapon_stock, get_civil_traffic)
+
+
+@pytest.fixture(autouse=True)
+def fixed_snapshot_tools(monkeypatch):
+    """These tools read a scenario snapshot; the agent tests only need their fixed outputs."""
+    for module in SNAPSHOT_TOOLS:
+        spec, _fn = TOOLS_BY_NAME[module.SPEC.name]
+
+        async def fixed(payload, ctx, output=module.STUB_OUTPUT):
+            return output
+
+        monkeypatch.setitem(TOOLS_BY_NAME, spec.name, (spec, fixed))
 
 
 class ScriptedModel:
@@ -139,7 +154,7 @@ def test_invalid_args_are_returned_for_a_later_call():
             _calls(
                 (
                     "get_civil_traffic",
-                    {"polygon": [[28.0, 77.0], [28.1, 77.1]], "since": "2026-06-01T06:00:00Z"},
+                    {"polygon": [[28.0, 77.0], [28.1, 77.1], [28.0, 77.2]], "since": "2026-06-01T06:00:00Z"},
                     "good",
                 )
             ),
