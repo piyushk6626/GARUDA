@@ -1,9 +1,9 @@
-"""Data tool `search_doctrine`. Backing: NEW queries/doctrine.py + ingest/doctrine.py. See docs/02_llm_harness/retrieval_and_context.md."""
+"""Data tool `search_doctrine`. Backing: queries/doctrine.py. See docs/02_llm_harness/retrieval_and_context.md."""
 
 from pydantic import BaseModel, Field
 
 from garuda.contracts.tool import ToolContext, ToolSpec
-from garuda.tools.stubs import fixed
+from garuda.queries.doctrine import search_passages
 
 
 class Passage(BaseModel):
@@ -36,6 +36,14 @@ STUB_OUTPUT = SearchDoctrineOutput(
 
 
 async def search_doctrine(payload: SearchDoctrineInput, ctx: ToolContext) -> SearchDoctrineOutput:
-    """Skeleton: same output for every input until retrieval is wired."""
-    _ = payload, ctx
-    return fixed(STUB_OUTPUT)
+    """Top doctrine passages for a query. Full-text and vector ranks are fused in Postgres."""
+    if ctx.doctrine is None or ctx.embedder is None:
+        raise RuntimeError("doctrine index not configured")
+    rows = await search_passages(
+        ctx.doctrine,
+        ctx.embedder,
+        payload.query,
+        k=payload.k,
+        timeout_s=SPEC.timeout_s,
+    )
+    return SearchDoctrineOutput(passages=[Passage.model_validate(row) for row in rows])

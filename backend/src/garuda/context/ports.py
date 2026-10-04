@@ -29,5 +29,17 @@ class GraphReader(Protocol):
     async def read(self, cypher: str, params: dict[str, Any], *, timeout_s: float) -> list[dict[str, Any]]: ...
 
 
+class DoctrineReader(Protocol):
+    """Read-only SQL against doctrine chunks. Implementations must refuse writes."""
+
+    async def read(self, sql: str, args: tuple[Any, ...], *, timeout_s: float) -> list[dict[str, Any]]: ...
+
+
+class Embedder(Protocol):
+    """Turns query text into the vector stored on doc_chunk.embedding."""
+
+    async def embed(self, text: str) -> list[float]: ...
+
+
 class Clock(Protocol):
     def now(self) -> datetime: ...

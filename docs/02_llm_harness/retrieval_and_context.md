@@ -6,10 +6,10 @@
 3. **Document RAG**: doctrine, SOPs, ROE-like guidance, aircraft manuals (all synthetic or public), via `search_doctrine`.
 
 ## Document RAG
-- Store: Postgres `pgvector` table `doc_chunk(chunk_id, doc_id, text, embedding vector(1536), meta jsonb)`.
+- Store: Postgres `pgvector` table `doc_chunk(chunk_id, doc_id, text, embedding vector(3072), meta jsonb)`.
 - Chunking: ~500 tokens, 80 overlap, heading-aware (markdown).
 - Hybrid search: vector cosine + Postgres full-text (`tsvector`), merged with reciprocal rank fusion.
-- Embedding model via the same adapter (cloud now; local `bge-m3` later).
+- Embedding model: `text-embedding-3-large` via the same adapter (local `bge-m3` later).
 - Tool: `search_doctrine(query, k=5) -> list[Passage(text, doc, score)]`.
 
 ## Context compression

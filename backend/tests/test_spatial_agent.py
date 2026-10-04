@@ -1,4 +1,4 @@
-"""Spatial sub-agent: a scripted model picks geometry ops; the stub tool returns them."""
+"""Spatial sub-agent: a scripted model picks geometry ops; spatial_query runs them."""
 
 import asyncio
 from datetime import datetime, timezone
@@ -6,15 +6,21 @@ from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage
 
+from garuda.bases import BASES
 from garuda.contracts.tool import ToolContext
+from garuda.generators.gis import great_circle_km
 from garuda.harness.retrieval import RetrievalSession
 from garuda.harness.retrieval.tools import ASK_NAME, FINISH_NAME
 from garuda.harness.spatial import query_geometry
 from garuda.harness.spatial.prompts import spatial_system_prompt
 from garuda.harness.spatial.tools import SPATIAL_TOOL_NAME
+from garuda.schemas.gis import BaseRecord
+from garuda.schemas.mission import Target
 
 WHEN = datetime(2026, 6, 1, 6, 0, tzinfo=timezone.utc)
 OPS = ("distance_km", "within_radius", "nearest", "intersects", "buffer")
+TARGET_LAT = 27.0
+TARGET_LON = 74.0
 
 
 class ScriptedModel:
@@ -36,9 +42,46 @@ class ScriptedModel:
         return self.script.pop(0)
 
 
+def _base(airfield) -> BaseRecord:
+    return BaseRecord(
+        base_id=airfield.base_id,
+        name=airfield.name,
+        icao=airfield.icao,
+        lat=airfield.lat,
+        lon=airfield.lon,
+        elevation_ft=airfield.elevation_ft,
+        runway_count=1,
+        runway_length_m=2000,
+        shelter_count=8,
+        fuel_capacity_l=1000,
+        ground_crew_teams=1,
+        max_sorties_per_hour=1.0,
+    )
+
+
+def _world() -> SimpleNamespace:
+    return SimpleNamespace(
+        bases=[_base(BASES[0]), _base(BASES[1])],
+        features=[],
+        borders=[],
+        targets=[
+            Target(
+                target_id="T-7",
+                target_class="RUNWAY",
+                lat=TARGET_LAT,
+                lon=TARGET_LON,
+                value=1.0,
+                hardness=0.5,
+                defended_by=[],
+            )
+        ],
+    )
+
+
 def _ctx() -> ToolContext:
     blank = SimpleNamespace()
-    return ToolContext(scenario=blank, plans=blank, models=blank, providers=blank, scenario_time=WHEN)
+    scenario = SimpleNamespace(snapshot=lambda: _world())
+    return ToolContext(scenario=scenario, plans=blank, models=blank, providers=blank, scenario_time=WHEN)
 
 
 def _calls(*calls: tuple[str, dict, str]) -> AIMessage:
@@ -57,7 +100,7 @@ def test_tools_are_spatial_query_and_controls_only():
     assert names == {SPATIAL_TOOL_NAME, FINISH_NAME, ASK_NAME}
 
 
-def test_distance_call_then_finish_returns_stub():
+def test_distance_call_then_finish_returns_geometry():
     model = ScriptedModel(
         [
             _calls(
@@ -74,13 +117,16 @@ def test_distance_call_then_finish_returns_stub():
 
     result = asyncio.run(query_geometry("How far is B1 from T-7?", _ctx(), model=model))
 
+    b1 = BASES[0]
+    expected_km = round(great_circle_km(b1.lat, b1.lon, TARGET_LAT, TARGET_LON), 3)
     assert model.invocations == 2
     call = result.calls[0]
     assert call.name == SPATIAL_TOOL_NAME
     assert call.ok is True
-    assert call.data["value_km"] == 120.0
-    assert call.data["hits"] == ["B1"]
-    assert "B1" in model.seen[1][-1].content
+    assert call.data["op"] == "distance_km"
+    assert call.data["value_km"] == expected_km
+    assert call.data["hits"] == []
+    assert str(expected_km) in model.seen[1][-1].content
 
 
 def test_bad_args_are_errors():

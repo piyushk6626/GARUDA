@@ -3,6 +3,7 @@
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Any
 
 from langchain_core.messages import AIMessage
 
@@ -34,7 +35,7 @@ class ScriptedModel:
         return self.script.pop(0)
 
 
-def _ctx() -> ToolContext:
+def _ctx(doctrine: Any = None, embedder: Any = None) -> ToolContext:
     blank = SimpleNamespace()
     return ToolContext(
         scenario=blank,
@@ -42,6 +43,8 @@ def _ctx() -> ToolContext:
         models=blank,
         providers=blank,
         scenario_time=WHEN,
+        doctrine=doctrine,
+        embedder=embedder,
     )
 
 
@@ -181,7 +184,21 @@ def test_search_doctrine_returns_passages():
         ]
     )
 
-    result = asyncio.run(retrieve("What does doctrine say about tanker join?", _ctx(), model=model))
+    class _Reader:
+        async def read(self, sql: str, args: tuple, *, timeout_s: float) -> list[dict]:
+            return [{"text": "Join the tanker from astern.", "doc": "sop-1", "score": 0.9}]
+
+    class _Embedder:
+        async def embed(self, text: str) -> list[float]:
+            return [0.0] * 3072
+
+    result = asyncio.run(
+        retrieve(
+            "What does doctrine say about tanker join?",
+            _ctx(doctrine=_Reader(), embedder=_Embedder()),
+            model=model,
+        )
+    )
 
     assert model.invocations == 2
     assert result.calls[0].name == "search_doctrine"
