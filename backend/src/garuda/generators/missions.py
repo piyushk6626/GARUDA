@@ -13,6 +13,7 @@ from faker import Faker
 from shapely.geometry import Polygon
 
 from garuda.config import ScenarioConfig
+from garuda.generators.gis import build_gis
 from garuda.generators.targets import build_targets
 from garuda.generators.threats import build_threats, suppress_sead_site
 from garuda.generators.weapons import build_weapons
@@ -84,6 +85,7 @@ def build_scenario(config: ScenarioConfig, seed: int) -> GeneratedScenario:
     weapons, stocks, load_configs, compatibilities = build_weapons(config, seed)
     threats, tracks, clusters = build_threats(config, rng)
     targets = build_targets(config, rng, clusters)
+    bases, features, borders, distances, terrain = build_gis(config, seed, targets)
     missions = _build_missions(config, seed, rng, targets)
     suppress_sead_site(threats, missions, targets)
     cells, observations = build_weather(config, rng)
@@ -99,6 +101,11 @@ def build_scenario(config: ScenarioConfig, seed: int) -> GeneratedScenario:
         compatibilities=compatibilities,
         cells=cells,
         observations=observations,
+        bases=bases,
+        features=features,
+        borders=borders,
+        distances=distances,
+        terrain=terrain,
     )
 
 

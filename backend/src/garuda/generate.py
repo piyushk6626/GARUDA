@@ -23,7 +23,10 @@ def main(argv: list[str] | None = None) -> None:
             f"missions={len(scenario.missions)} threats={len(scenario.threats)} "
             f"tracks={len(scenario.tracks)} weapons={len(scenario.weapons)} "
             f"stocks={len(scenario.stocks)} loads={len(scenario.load_configs)} "
-            f"cells={len(scenario.cells)} observations={len(scenario.observations)}"
+            f"cells={len(scenario.cells)} observations={len(scenario.observations)} "
+            f"bases={len(scenario.bases)} features={len(scenario.features)} "
+            f"borders={len(scenario.borders)} distances={len(scenario.distances)} "
+            f"terrain={scenario.terrain.rows}x{scenario.terrain.cols}"
         )
         return
 
@@ -34,7 +37,9 @@ def main(argv: list[str] | None = None) -> None:
         f"pending={result.pending} events={result.events} "
         f"threats={result.threats} tracks={result.tracks} "
         f"weapons={result.weapons} stocks={result.stocks} loads={result.load_configs} "
-        f"cells={result.cells} observations={result.observations}"
+        f"cells={result.cells} observations={result.observations} "
+        f"bases={result.bases} features={result.features} "
+        f"borders={result.borders} distances={result.distances}"
     )
 
 

@@ -1,0 +1,30 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "border_id": "IN-PK",
+        "name": "India-Pakistan",
+        "kind": "international"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [68.20, 23.70],
+          [69.40, 24.20],
+          [70.10, 25.20],
+          [70.05, 26.30],
+          [70.25, 27.40],
+          [70.55, 28.60],
+          [71.40, 29.60],
+          [73.90, 30.40],
+          [74.55, 31.10],
+          [74.57, 31.60],
+          [74.70, 32.40],
+          [74.40, 33.00]
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+ident,name,latitude_deg,longitude_deg,elevation_ft,type
+VABJ,Bhuj Airport,23.2877998352,69.6701965332,268,medium_airport
+VIAG,Agra Airport / Agra Air Force Station,27.157975,77.961025,551,medium_airport
+VIAM,Ambala Air Force Station,30.368099,76.816704,909,medium_airport
+VIAX,Adampur Airport,31.4338,75.758797,775,small_airport
+VIBK,Nal Airport,28.070601,73.207199,750,medium_airport
+VIJO,Jodhpur Airport,26.251100540161133,73.04889678955078,717,medium_airport
+VIJR,Jaisalmer Airport,26.8887,70.864998,751,medium_airport

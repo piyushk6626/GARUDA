@@ -1,0 +1,94 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:jodhpur", "name": "Jodhpur", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [73.0243, 26.2389]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:jaisalmer", "name": "Jaisalmer", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [70.9083, 26.9157]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:bikaner", "name": "Bikaner", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [73.3119, 28.0229]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:barmer", "name": "Barmer", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [71.3924, 25.7463]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:phalodi", "name": "Phalodi", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [72.3686, 27.1311]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:sri-ganganagar", "name": "Sri Ganganagar", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [73.8772, 29.9094]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:bhuj", "name": "Bhuj", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [69.6669, 23.2420]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:agra", "name": "Agra", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [77.9800, 27.1767]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:ambala", "name": "Ambala", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [76.7767, 30.3782]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:amritsar", "name": "Amritsar", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [74.8723, 31.6340]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:ludhiana", "name": "Ludhiana", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [75.8573, 30.9010]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:jaipur", "name": "Jaipur", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [75.7873, 26.9124]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:ajmer", "name": "Ajmer", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [74.6399, 26.4499]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:bathinda", "name": "Bathinda", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [74.9455, 30.2110]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "city:suratgarh", "name": "Suratgarh", "kind": "city"},
+      "geometry": {"type": "Point", "coordinates": [73.8998, 29.3215]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"feature_id": "river:luni", "name": "Luni", "kind": "river"},
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [74.64, 26.45],
+          [73.30, 25.95],
+          [72.20, 25.70],
+          [71.40, 25.20],
+          [70.40, 24.50]
+        ]
+      }
+    }
+  ]
+}

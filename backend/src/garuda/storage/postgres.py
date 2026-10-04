@@ -2,6 +2,7 @@ import json
 
 import asyncpg
 
+from garuda.schemas.gis import BaseRecord, BaseTargetDistance, BorderFeature, GeoFeature
 from garuda.schemas.mission import Mission, Target
 from garuda.schemas.threat import Threat, ThreatTrack
 from garuda.schemas.weapon import Compatibility, LoadConfig, WeaponStock, WeaponType
@@ -26,19 +27,28 @@ async def seed_postgres(
     compatibilities: list[Compatibility],
     cells: list[WeatherCell],
     observations: list[WeatherStationObs],
+    bases: list[BaseRecord],
+    features: list[GeoFeature],
+    borders: list[BorderFeature],
+    distances: list[BaseTargetDistance],
 ) -> None:
     connection = await asyncpg.connect(asyncpg_dsn(dsn))
     try:
         async with connection.transaction():
             await connection.execute(
                 """
-                TRUNCATE plan_assignment, plan, mission, target, threat_track, threat,
-                         weapon_stock, weapon_compatibility, load_config, weapon_type
+                TRUNCATE base_target_distance, plan_assignment, plan, mission, target,
+                         threat_track, threat, weapon_stock, weapon_compatibility,
+                         load_config, weapon_type, geo_feature, border, base
                 """
             )
             await connection.execute("DELETE FROM weather_station_obs WHERE source = 'synthetic'")
             await connection.execute("DELETE FROM weather_grid WHERE source = 'synthetic'")
+            await _insert_bases(connection, bases)
+            await _insert_features(connection, features)
+            await _insert_borders(connection, borders)
             await _insert_targets(connection, targets)
+            await _insert_distances(connection, distances)
             await _insert_missions(connection, missions)
             await _insert_threats(connection, threats)
             await _insert_tracks(connection, tracks)
@@ -47,6 +57,24 @@ async def seed_postgres(
             await _insert_load_configs(connection, load_configs)
             await _insert_compatibilities(connection, compatibilities)
             await _upsert_weather(connection, cells, observations)
+    finally:
+        await connection.close()
+
+
+async def upsert_gis(
+    dsn: str,
+    bases: list[BaseRecord],
+    features: list[GeoFeature],
+    borders: list[BorderFeature],
+) -> None:
+    connection = await asyncpg.connect(asyncpg_dsn(dsn))
+    try:
+        async with connection.transaction():
+            await _upsert_bases(connection, bases)
+            await connection.execute("DELETE FROM geo_feature")
+            await connection.execute("DELETE FROM border")
+            await _insert_features(connection, features)
+            await _insert_borders(connection, borders)
     finally:
         await connection.close()
 
@@ -62,6 +90,94 @@ async def upsert_weather(
             await _upsert_weather(connection, cells, observations)
     finally:
         await connection.close()
+
+
+async def _insert_bases(connection: asyncpg.Connection, bases: list[BaseRecord]) -> None:
+    await _upsert_bases(connection, bases)
+
+
+async def _upsert_bases(connection: asyncpg.Connection, bases: list[BaseRecord]) -> None:
+    if not bases:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO base (
+            base_id, name, icao, position, elevation_ft, runway_count, runway_length_m,
+            shelter_count, fuel_capacity_l, ground_crew_teams, max_sorties_per_hour
+        )
+        VALUES (
+            $1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326), $6, $7, $8, $9, $10, $11, $12
+        )
+        ON CONFLICT (base_id) DO UPDATE SET
+            name = EXCLUDED.name,
+            icao = EXCLUDED.icao,
+            position = EXCLUDED.position,
+            elevation_ft = EXCLUDED.elevation_ft,
+            runway_count = EXCLUDED.runway_count,
+            runway_length_m = EXCLUDED.runway_length_m,
+            shelter_count = EXCLUDED.shelter_count,
+            fuel_capacity_l = EXCLUDED.fuel_capacity_l,
+            ground_crew_teams = EXCLUDED.ground_crew_teams,
+            max_sorties_per_hour = EXCLUDED.max_sorties_per_hour
+        """,
+        [_base_row(base) for base in bases],
+    )
+
+
+async def _insert_features(connection: asyncpg.Connection, features: list[GeoFeature]) -> None:
+    if not features:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO geo_feature (feature_id, kind, name, geom)
+        VALUES ($1, $2, $3, ST_GeomFromText($4, 4326))
+        """,
+        [(feature.feature_id, feature.kind, feature.name, feature.wkt) for feature in features],
+    )
+
+
+async def _insert_borders(connection: asyncpg.Connection, borders: list[BorderFeature]) -> None:
+    if not borders:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO border (border_id, name, kind, geom)
+        VALUES ($1, $2, $3, ST_GeomFromText($4, 4326))
+        """,
+        [(border.border_id, border.name, border.kind, border.wkt) for border in borders],
+    )
+
+
+async def _insert_distances(
+    connection: asyncpg.Connection,
+    distances: list[BaseTargetDistance],
+) -> None:
+    if not distances:
+        return
+    await connection.executemany(
+        """
+        INSERT INTO base_target_distance (base_id, target_id, distance_km)
+        VALUES ($1, $2, $3)
+        """,
+        [(row.base_id, row.target_id, row.distance_km) for row in distances],
+    )
+
+
+def _base_row(base: BaseRecord) -> tuple[object, ...]:
+    return (
+        base.base_id,
+        base.name,
+        base.icao,
+        base.lon,
+        base.lat,
+        base.elevation_ft,
+        base.runway_count,
+        base.runway_length_m,
+        base.shelter_count,
+        base.fuel_capacity_l,
+        base.ground_crew_teams,
+        base.max_sorties_per_hour,
+    )
 
 
 async def _insert_targets(connection: asyncpg.Connection, targets: list[Target]) -> None:

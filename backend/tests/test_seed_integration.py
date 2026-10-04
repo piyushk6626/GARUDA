@@ -40,6 +40,10 @@ async def _seed_roundtrip() -> None:
     assert result.stock_keys == len(scenario.stocks)
     assert result.cells == len(scenario.cells)
     assert result.observations == len(scenario.observations)
+    assert result.bases == len(scenario.bases) == 7
+    assert result.features == len(scenario.features)
+    assert result.borders == len(scenario.borders)
+    assert result.distances == len(scenario.bases) * len(scenario.targets)
     assert result.events == (
         len(scenario.missions) + len(scenario.threats) + len(scenario.stocks) + 8
     )
@@ -55,6 +59,10 @@ async def _seed_roundtrip() -> None:
         stored_compat = await connection.fetchval("SELECT count(*) FROM weapon_compatibility")
         stored_cells = await connection.fetchval("SELECT count(*) FROM weather_grid")
         stored_obs = await connection.fetchval("SELECT count(*) FROM weather_station_obs")
+        stored_bases = await connection.fetchval("SELECT count(*) FROM base")
+        stored_features = await connection.fetchval("SELECT count(*) FROM geo_feature")
+        stored_borders = await connection.fetchval("SELECT count(*) FROM border")
+        stored_distances = await connection.fetchval("SELECT count(*) FROM base_target_distance")
     finally:
         await connection.close()
     assert stored == len(scenario.missions)
@@ -66,6 +74,10 @@ async def _seed_roundtrip() -> None:
     assert stored_compat == len(scenario.compatibilities)
     assert stored_cells == len(scenario.cells)
     assert stored_obs == len(scenario.observations)
+    assert stored_bases == len(scenario.bases)
+    assert stored_features == len(scenario.features)
+    assert stored_borders == len(scenario.borders)
+    assert stored_distances == len(scenario.distances)
 
     client = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
     try:
@@ -75,6 +87,7 @@ async def _seed_roundtrip() -> None:
         stored_qty = await client.get(f"stock:{sample.base_id}:{sample.weapon_code}")
         viax = await client.get("wx:base:VIAX")
         grid_keys = [key async for key in client.scan_iter(match="wx:grid:*", count=200)]
+        base_hash = await client.hgetall("base:B1")
     finally:
         await client.aclose()
     assert pending == len(scenario.missions)
@@ -84,3 +97,13 @@ async def _seed_roundtrip() -> None:
     assert viax is not None
     assert json.loads(viax)["icao"] == "VIAX"
     assert grid_keys
+    fields = {
+        (key.decode() if isinstance(key, bytes) else key): (
+            value.decode() if isinstance(value, bytes) else value
+        )
+        for key, value in base_hash.items()
+    }
+    jodhpur = next(base for base in scenario.bases if base.base_id == "B1")
+    assert fields["icao"] == "VIJO"
+    assert fields["base_id"] == "B1"
+    assert fields["runway_length_m"] == str(jodhpur.runway_length_m)

@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from garuda.schemas.gis import BaseRecord, BaseTargetDistance, BorderFeature, GeoFeature, TerrainMeta
 from garuda.schemas.threat import Threat, ThreatTrack
 from garuda.schemas.weapon import Compatibility, LoadConfig, WeaponStock, WeaponType
 from garuda.schemas.weather import WeatherCell, WeatherStationObs
@@ -83,3 +84,8 @@ class GeneratedScenario(BaseModel):
     compatibilities: list[Compatibility]
     cells: list[WeatherCell]
     observations: list[WeatherStationObs]
+    bases: list[BaseRecord]
+    features: list[GeoFeature]
+    borders: list[BorderFeature]
+    distances: list[BaseTargetDistance]
+    terrain: TerrainMeta

@@ -1,7 +1,10 @@
 import os
 from dataclasses import dataclass
 
+from garuda.config import BoundingBox
+from garuda.generators.gis import build_terrain
 from garuda.schemas.mission import GeneratedScenario
+from garuda.storage.gis_files import gis_root, publish_terrain, write_terrain_files
 from garuda.storage.kafka_publish import publish_missions, publish_stocks, publish_threats, publish_weather
 from garuda.storage.neo4j_sync import sync_neo4j
 from garuda.storage.postgres import seed_postgres
@@ -24,6 +27,10 @@ class SeedResult:
     stock_keys: int
     cells: int
     observations: int
+    bases: int
+    features: int
+    borders: int
+    distances: int
 
 
 def postgres_dsn() -> str:
@@ -59,6 +66,10 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         scenario.compatibilities,
         scenario.cells,
         scenario.observations,
+        scenario.bases,
+        scenario.features,
+        scenario.borders,
+        scenario.distances,
     )
     uri, user, password = neo4j_settings()
     await sync_neo4j(
@@ -71,6 +82,7 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         scenario.weapons,
         scenario.stocks,
         scenario.cells,
+        scenario.bases,
     )
     pending, active, stock_keys = await seed_redis(
         redis_url(),
@@ -79,11 +91,25 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         scenario.stocks,
         scenario.cells,
         scenario.observations,
+        scenario.bases,
     )
     events = await publish_missions(kafka_bootstrap(), scenario.missions)
     events += await publish_threats(kafka_bootstrap(), scenario.threats)
     events += await publish_stocks(kafka_bootstrap(), scenario.stocks)
     events += await publish_weather(kafka_bootstrap(), scenario.cells, scenario.observations)
+    terrain = scenario.terrain
+    grid = build_terrain(
+        BoundingBox(
+            lat_min=terrain.lat_min,
+            lat_max=terrain.lat_max,
+            lon_min=terrain.lon_min,
+            lon_max=terrain.lon_max,
+        ),
+        scenario.seed,
+    )
+    root = gis_root()
+    write_terrain_files(grid, root)
+    publish_terrain(root)
     return SeedResult(
         targets=len(scenario.targets),
         missions=len(scenario.missions),
@@ -99,4 +125,8 @@ async def write_all(scenario: GeneratedScenario) -> SeedResult:
         stock_keys=stock_keys,
         cells=len(scenario.cells),
         observations=len(scenario.observations),
+        bases=len(scenario.bases),
+        features=len(scenario.features),
+        borders=len(scenario.borders),
+        distances=len(scenario.distances),
     )

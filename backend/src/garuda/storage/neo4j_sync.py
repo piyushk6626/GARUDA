@@ -2,6 +2,7 @@ from neo4j import AsyncGraphDatabase
 
 from garuda.bases import BASES
 from garuda.generators.weather import cells_for_bases
+from garuda.schemas.gis import BaseRecord
 from garuda.schemas.mission import Mission, Target
 from garuda.schemas.threat import Threat
 from garuda.schemas.weapon import WeaponStock, WeaponType
@@ -84,7 +85,7 @@ MERGE (s)-[:OF_TYPE]->(w)
 
 _CLEAR_WEATHER = "MATCH (w:WeatherCell) DETACH DELETE w"
 
-_BASES = """
+_BASE_IDENTITY = """
 UNWIND $rows AS row
 MERGE (b:Base {base_id: row.base_id})
 SET b.name = row.name,
@@ -92,6 +93,22 @@ SET b.name = row.name,
     b.lat = row.lat,
     b.lon = row.lon,
     b.elevation_ft = row.elevation_ft
+"""
+
+_BASES = """
+UNWIND $rows AS row
+MERGE (b:Base {base_id: row.base_id})
+SET b.name = row.name,
+    b.icao = row.icao,
+    b.lat = row.lat,
+    b.lon = row.lon,
+    b.elevation_ft = row.elevation_ft,
+    b.runway_count = row.runway_count,
+    b.runway_length_m = row.runway_length_m,
+    b.shelter_count = row.shelter_count,
+    b.fuel_capacity_l = row.fuel_capacity_l,
+    b.ground_crew_teams = row.ground_crew_teams,
+    b.max_sorties_per_hour = row.max_sorties_per_hour
 """
 
 _WEATHER = """
@@ -122,6 +139,7 @@ async def sync_neo4j(
     weapons: list[WeaponType],
     stocks: list[WeaponStock],
     cells: list[WeatherCell],
+    bases: list[BaseRecord],
 ) -> None:
     driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
     try:
@@ -134,7 +152,7 @@ async def sync_neo4j(
                 _cover_rows(targets),
                 _weapon_rows(weapons),
                 _stock_rows(stocks),
-                _base_rows(),
+                _base_rows(bases),
                 _weather_rows(cells),
             )
     finally:
@@ -177,13 +195,31 @@ async def sync_weather_graph(
     driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
     try:
         async with driver.session() as session:
-            await session.execute_write(_write_weather_only, _base_rows(), _weather_rows(cells))
+            await session.execute_write(_write_weather_only, _identity_rows(), _weather_rows(cells))
     finally:
         await driver.close()
 
 
+async def sync_bases(uri: str, user: str, password: str, bases: list[BaseRecord]) -> None:
+    driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+    try:
+        async with driver.session() as session:
+            await session.execute_write(_write_bases, _base_rows(bases))
+    finally:
+        await driver.close()
+
+
+async def _write_bases(tx, base_rows: list[dict]) -> None:
+    if base_rows:
+        await _consume(tx, _BASES, rows=base_rows)
+
+
 async def _write_weather_only(tx, base_rows: list[dict], weather_rows: list[dict]) -> None:
-    await _write_weather(tx, base_rows, weather_rows)
+    await _consume(tx, _CLEAR_WEATHER)
+    if base_rows:
+        await _consume(tx, _BASE_IDENTITY, rows=base_rows)
+    if weather_rows:
+        await _consume(tx, _WEATHER, rows=weather_rows)
 
 
 async def _write_weather(tx, base_rows: list[dict], weather_rows: list[dict]) -> None:
@@ -262,7 +298,27 @@ def _stock_rows(stocks: list[WeaponStock]) -> list[dict]:
     ]
 
 
-def _base_rows() -> list[dict]:
+def _base_rows(bases: list[BaseRecord]) -> list[dict]:
+    return [
+        {
+            "base_id": base.base_id,
+            "name": base.name,
+            "icao": base.icao,
+            "lat": base.lat,
+            "lon": base.lon,
+            "elevation_ft": base.elevation_ft,
+            "runway_count": base.runway_count,
+            "runway_length_m": base.runway_length_m,
+            "shelter_count": base.shelter_count,
+            "fuel_capacity_l": base.fuel_capacity_l,
+            "ground_crew_teams": base.ground_crew_teams,
+            "max_sorties_per_hour": base.max_sorties_per_hour,
+        }
+        for base in bases
+    ]
+
+
+def _identity_rows() -> list[dict]:
     return [
         {
             "base_id": airfield.base_id,
